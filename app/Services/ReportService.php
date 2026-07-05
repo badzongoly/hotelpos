@@ -35,25 +35,23 @@ final class ReportService
         $startAt = $start . ' 00:00:00';
         $endAt = $end . ' 23:59:59';
         $days = max(1, (int)((strtotime($end) - strtotime($start)) / 86400) + 1);
-        $monthStart = gmdate('Y-m-01');
-        $monthEnd = gmdate('Y-m-d');
 
         return [
             'filters' => $filters + ['preset' => $preset, 'start' => $start, 'end' => $end, 'days' => $days],
             'options' => $this->filterOptions(),
-            'dashboard' => $this->dashboard($monthStart, $monthEnd),
-            'monthly_cashflow' => ['rows' => $this->monthlyCashflow()],
+            'dashboard' => $this->dashboard($start, $end),
+            'monthly_cashflow' => ['rows' => $this->monthlyCashflow($start, $end)],
             'room_performance' => ['rows' => $this->roomPerformance($startAt, $endAt, $days, $filters)],
             'occupancy' => $this->occupancy($start, $end, $days, $filters),
             'extras' => $this->extrasReport($startAt, $endAt, $filters),
             'expenses' => $this->expensesReport($start, $end, $filters),
             'stock' => $this->stockReport($startAt, $endAt),
             'payments' => $this->paymentsReport($startAt, $endAt, $filters),
-            'outstanding_balances' => ['rows' => $this->outstandingBalances($role)],
+            'outstanding_balances' => ['rows' => $this->outstandingBalances($role, $start, $end)],
             'discounts_cancellations' => $this->discountsAndCancellations($startAt, $endAt),
             'guests' => $this->guestInsights($startAt, $endAt),
             'staff' => ['rows' => $this->staffAccountability($startAt, $endAt)],
-            'anomalies' => ['issues' => $this->anomalies()],
+            'anomalies' => ['issues' => $this->anomalies($startAt, $endAt)],
             'meta' => [
                 'currency' => 'GHS',
                 'privacy_limited' => !in_array($role, ['administrator', 'manager', 'auditor'], true),
@@ -67,35 +65,35 @@ final class ReportService
         ];
     }
 
-    private function dashboard(string $monthStart, string $monthEnd): array
+    private function dashboard(string $start, string $end): array
     {
-        $today = gmdate('Y-m-d');
+
         $rooms = $this->db->fetch('SELECT COUNT(*) total, SUM(status="occupied") occupied, SUM(status="vacant") vacant, SUM(status="dirty") dirty, SUM(status="maintenance") maintenance FROM rooms WHERE active=1 AND occupancy_counted=1') ?: [];
         $totalRooms = (int)($rooms['total'] ?? 0);
         $occupied = (int)($rooms['occupied'] ?? 0);
-        $mtdRevenue = $this->scalar('SELECT COALESCE(SUM(amount),0) FROM payments WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ?', [$monthStart, $monthEnd]);
-        $mtdExpenses = $this->scalar('SELECT COALESCE(SUM(amount),0) FROM expenses WHERE voided_at IS NULL AND expense_date BETWEEN ? AND ?', [$monthStart, $monthEnd]);
+        $rangeRevenue = $this->scalar('SELECT COALESCE(SUM(amount),0) FROM payments WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ?', [$start, $end]);
+        $rangeExpenses = $this->scalar('SELECT COALESCE(SUM(amount),0) FROM expenses WHERE voided_at IS NULL AND expense_date BETWEEN ? AND ?', [$start, $end]);
         return [
-            'today_revenue' => round($this->scalar('SELECT COALESCE(SUM(amount),0) FROM payments WHERE voided_at IS NULL AND DATE(created_at)=?', [$today]), 2),
-            'mtd_revenue' => round($mtdRevenue, 2),
-            'mtd_expenses' => round($mtdExpenses, 2),
-            'mtd_cashflow' => round($mtdRevenue - $mtdExpenses, 2),
+            'today_revenue' => round($rangeRevenue, 2),
+            'mtd_revenue' => round($rangeRevenue, 2),
+            'mtd_expenses' => round($rangeExpenses, 2),
+            'mtd_cashflow' => round($rangeRevenue - $rangeExpenses, 2),
             'current_occupancy_rate' => $totalRooms > 0 ? round(($occupied / $totalRooms) * 100, 2) : 0,
             'occupied_rooms' => $occupied,
             'vacant_rooms' => (int)($rooms['vacant'] ?? 0),
             'dirty_rooms' => (int)($rooms['dirty'] ?? 0),
             'maintenance_rooms' => (int)($rooms['maintenance'] ?? 0),
-            'outstanding_balances' => round($this->outstandingTotal(), 2),
-            'extras_sales_today' => round($this->scalar('SELECT COALESCE(SUM(qty * unit_price),0) FROM booking_extras WHERE voided_at IS NULL AND DATE(created_at)=?', [$today]), 2),
+            'outstanding_balances' => round($this->outstandingTotal($start, $end), 2),
+            'extras_sales_today' => round($this->scalar('SELECT COALESCE(SUM(qty * unit_price),0) FROM booking_extras WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ?', [$start, $end]), 2),
             'low_stock_count' => (int)$this->scalar('SELECT COUNT(*) FROM extras WHERE active=1 AND stock_tracked=1 AND stock_qty <= 0'),
-            'pending_checkouts' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="active" AND DATE(checkin_at) < ?', [$today]),
-            'cancelled_bookings_month' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="cancelled" AND DATE(COALESCE(updated_at, created_at)) BETWEEN ? AND ?', [$monthStart, $monthEnd]),
+            'pending_checkouts' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="active" AND DATE(checkin_at) BETWEEN ? AND ?', [$start, $end]),
+            'cancelled_bookings_month' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="cancelled" AND DATE(COALESCE(updated_at, created_at)) BETWEEN ? AND ?', [$start, $end]),
         ];
     }
 
-    private function monthlyCashflow(): array
+    private function monthlyCashflow(string $start, string $end): array
     {
-        $rows = $this->db->fetchAll('SELECT m.month, COALESCE(p.revenue,0) revenue, COALESCE(e.expenses,0) expenses, COALESCE(room.room_revenue,0) room_revenue, COALESCE(extra.extras_revenue,0) extras_revenue FROM (SELECT DATE_FORMAT(created_at, "%Y-%m") month FROM payments WHERE created_at >= DATE_SUB(UTC_DATE(), INTERVAL 12 MONTH) UNION SELECT DATE_FORMAT(expense_date, "%Y-%m") month FROM expenses WHERE expense_date >= DATE_SUB(UTC_DATE(), INTERVAL 12 MONTH)) m LEFT JOIN (SELECT DATE_FORMAT(created_at, "%Y-%m") month, SUM(amount) revenue FROM payments WHERE voided_at IS NULL GROUP BY DATE_FORMAT(created_at, "%Y-%m")) p ON p.month=m.month LEFT JOIN (SELECT DATE_FORMAT(expense_date, "%Y-%m") month, SUM(amount) expenses FROM expenses WHERE voided_at IS NULL GROUP BY DATE_FORMAT(expense_date, "%Y-%m")) e ON e.month=m.month LEFT JOIN (SELECT DATE_FORMAT(checkin_at, "%Y-%m") month, SUM(GREATEST(1, DATEDIFF(DATE(COALESCE(checkout_at, UTC_TIMESTAMP())), DATE(checkin_at))) * rate_per_night) room_revenue FROM bookings WHERE status <> "cancelled" GROUP BY DATE_FORMAT(checkin_at, "%Y-%m")) room ON room.month=m.month LEFT JOIN (SELECT DATE_FORMAT(created_at, "%Y-%m") month, SUM(qty * unit_price) extras_revenue FROM booking_extras WHERE voided_at IS NULL GROUP BY DATE_FORMAT(created_at, "%Y-%m")) extra ON extra.month=m.month GROUP BY m.month, p.revenue, e.expenses, room.room_revenue, extra.extras_revenue ORDER BY m.month');
+        $rows = $this->db->fetchAll('SELECT m.month, COALESCE(p.revenue,0) revenue, COALESCE(e.expenses,0) expenses, COALESCE(room.room_revenue,0) room_revenue, COALESCE(extra.extras_revenue,0) extras_revenue FROM (SELECT DATE_FORMAT(created_at, "%Y-%m") month FROM payments WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ? UNION SELECT DATE_FORMAT(expense_date, "%Y-%m") month FROM expenses WHERE voided_at IS NULL AND expense_date BETWEEN ? AND ?) m LEFT JOIN (SELECT DATE_FORMAT(created_at, "%Y-%m") month, SUM(amount) revenue FROM payments WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ? GROUP BY DATE_FORMAT(created_at, "%Y-%m")) p ON p.month=m.month LEFT JOIN (SELECT DATE_FORMAT(expense_date, "%Y-%m") month, SUM(amount) expenses FROM expenses WHERE voided_at IS NULL AND expense_date BETWEEN ? AND ? GROUP BY DATE_FORMAT(expense_date, "%Y-%m")) e ON e.month=m.month LEFT JOIN (SELECT DATE_FORMAT(checkin_at, "%Y-%m") month, SUM(GREATEST(1, DATEDIFF(DATE(COALESCE(checkout_at, UTC_TIMESTAMP())), DATE(checkin_at))) * rate_per_night) room_revenue FROM bookings WHERE status <> "cancelled" AND DATE(checkin_at) BETWEEN ? AND ? GROUP BY DATE_FORMAT(checkin_at, "%Y-%m")) room ON room.month=m.month LEFT JOIN (SELECT DATE_FORMAT(created_at, "%Y-%m") month, SUM(qty * unit_price) extras_revenue FROM booking_extras WHERE voided_at IS NULL AND DATE(created_at) BETWEEN ? AND ? GROUP BY DATE_FORMAT(created_at, "%Y-%m")) extra ON extra.month=m.month GROUP BY m.month, p.revenue, e.expenses, room.room_revenue, extra.extras_revenue ORDER BY m.month', [$start, $end, $start, $end, $start, $end, $start, $end, $start, $end, $start, $end]);
         $prev = null;
         foreach ($rows as &$row) {
             $row['revenue'] = round((float)$row['revenue'], 2);
@@ -211,10 +209,10 @@ final class ReportService
         return ['by_method' => $byMethod, 'monthly_by_method' => $this->db->fetchAll("SELECT DATE_FORMAT(p.created_at,'%Y-%m') month, p.method, SUM(p.amount) amount FROM payments p WHERE {$whereSql} GROUP BY DATE_FORMAT(p.created_at,'%Y-%m'), p.method ORDER BY month", $params), 'by_staff' => $this->db->fetchAll("SELECT COALESCE(u.name,'System') user_name, p.method, SUM(p.amount) amount FROM payments p LEFT JOIN users u ON u.id=p.created_by WHERE {$whereSql} GROUP BY COALESCE(u.name,'System'), p.method ORDER BY user_name", $params), 'by_booking_source' => [['booking_source' => 'N/A', 'amount' => null]]];
     }
 
-    private function outstandingBalances(string $role): array
+    private function outstandingBalances(string $role, string $start, string $end): array
     {
         $canSeeGuests = in_array($role, ['administrator', 'manager', 'auditor'], true);
-        $rows = $this->db->fetchAll('SELECT b.id, b.guest_name, b.contact, r.name room, b.checkin_at, b.checkout_at, b.status, COALESCE(u.name,"System") created_by, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) booking_total, COALESCE(p.paid_total,0) amount_paid, GREATEST(0, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) - COALESCE(p.paid_total,0)) balance_due, DATEDIFF(UTC_DATE(), DATE(COALESCE(b.checkout_at, b.checkin_at))) days_overdue FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN users u ON u.id=b.created_by LEFT JOIN (SELECT booking_id, SUM(qty*unit_price) extras_total FROM booking_extras WHERE voided_at IS NULL GROUP BY booking_id) be ON be.booking_id=b.id LEFT JOIN (SELECT booking_id, SUM(amount) paid_total FROM payments WHERE voided_at IS NULL GROUP BY booking_id) p ON p.booking_id=b.id WHERE b.status IN ("active","checked_out") HAVING balance_due > 0 ORDER BY balance_due DESC LIMIT 250');
+        $rows = $this->db->fetchAll('SELECT b.id, b.guest_name, b.contact, r.name room, b.checkin_at, b.checkout_at, b.status, COALESCE(u.name,"System") created_by, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) booking_total, COALESCE(p.paid_total,0) amount_paid, GREATEST(0, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) - COALESCE(p.paid_total,0)) balance_due, DATEDIFF(UTC_DATE(), DATE(COALESCE(b.checkout_at, b.checkin_at))) days_overdue FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN users u ON u.id=b.created_by LEFT JOIN (SELECT booking_id, SUM(qty*unit_price) extras_total FROM booking_extras WHERE voided_at IS NULL GROUP BY booking_id) be ON be.booking_id=b.id LEFT JOIN (SELECT booking_id, SUM(amount) paid_total FROM payments WHERE voided_at IS NULL GROUP BY booking_id) p ON p.booking_id=b.id WHERE b.status IN ("active","checked_out") AND DATE(b.checkin_at) BETWEEN ? AND ? HAVING balance_due > 0 ORDER BY balance_due DESC LIMIT 250', [$start, $end]);
         foreach ($rows as &$row) {
             if (!$canSeeGuests) { $row['guest_name'] = $this->maskName((string)$row['guest_name']); $row['contact'] = $this->maskContact((string)($row['contact'] ?? '')); }
             $row['booking_total'] = round((float)$row['booking_total'], 2);
@@ -227,7 +225,7 @@ final class ReportService
 
     private function discountsAndCancellations(string $startAt, string $endAt): array
     {
-        return ['summary' => ['total_discounts' => 'N/A', 'discount_pct_of_revenue' => 'N/A', 'cancelled_bookings' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="cancelled" AND COALESCE(updated_at, created_at) BETWEEN ? AND ?', [$startAt, $endAt])], 'discounts_by_staff' => [['user_name' => 'N/A', 'amount' => null]], 'cancellation_reasons' => $this->db->fetchAll('SELECT COALESCE(NULLIF(cancellation_reason,""),"Not recorded") reason, COUNT(*) total FROM bookings WHERE status="cancelled" AND COALESCE(updated_at, created_at) BETWEEN ? AND ? GROUP BY COALESCE(NULLIF(cancellation_reason,""),"Not recorded") ORDER BY total DESC', [$startAt, $endAt]), 'cancellations_by_month' => $this->db->fetchAll('SELECT DATE_FORMAT(COALESCE(updated_at, created_at),"%Y-%m") month, COUNT(*) total FROM bookings WHERE status="cancelled" GROUP BY DATE_FORMAT(COALESCE(updated_at, created_at),"%Y-%m") ORDER BY month'), 'rows' => $this->db->fetchAll('SELECT b.id booking_id, r.name room, b.rate_per_night original_amount, "N/A" discount, b.rate_per_night cancelled_amount, COALESCE(b.cancellation_reason,"Not recorded") reason, COALESCE(u.name,"System") user_name FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN users u ON u.id=b.created_by WHERE b.status="cancelled" AND COALESCE(b.updated_at, b.created_at) BETWEEN ? AND ? ORDER BY COALESCE(b.updated_at, b.created_at) DESC LIMIT 250', [$startAt, $endAt])];
+        return ['summary' => ['total_discounts' => 'N/A', 'discount_pct_of_revenue' => 'N/A', 'cancelled_bookings' => (int)$this->scalar('SELECT COUNT(*) FROM bookings WHERE status="cancelled" AND COALESCE(updated_at, created_at) BETWEEN ? AND ?', [$startAt, $endAt])], 'discounts_by_staff' => [['user_name' => 'N/A', 'amount' => null]], 'cancellation_reasons' => $this->db->fetchAll('SELECT COALESCE(NULLIF(cancellation_reason,""),"Not recorded") reason, COUNT(*) total FROM bookings WHERE status="cancelled" AND COALESCE(updated_at, created_at) BETWEEN ? AND ? GROUP BY COALESCE(NULLIF(cancellation_reason,""),"Not recorded") ORDER BY total DESC', [$startAt, $endAt]), 'cancellations_by_month' => $this->db->fetchAll('SELECT DATE_FORMAT(COALESCE(updated_at, created_at),"%Y-%m") month, COUNT(*) total FROM bookings WHERE status="cancelled" AND COALESCE(updated_at, created_at) BETWEEN ? AND ? GROUP BY DATE_FORMAT(COALESCE(updated_at, created_at),"%Y-%m") ORDER BY month', [$startAt, $endAt]), 'rows' => $this->db->fetchAll('SELECT b.id booking_id, r.name room, b.rate_per_night original_amount, "N/A" discount, b.rate_per_night cancelled_amount, COALESCE(b.cancellation_reason,"Not recorded") reason, COALESCE(u.name,"System") user_name FROM bookings b JOIN rooms r ON r.id=b.room_id LEFT JOIN users u ON u.id=b.created_by WHERE b.status="cancelled" AND COALESCE(b.updated_at, b.created_at) BETWEEN ? AND ? ORDER BY COALESCE(b.updated_at, b.created_at) DESC LIMIT 250', [$startAt, $endAt])];
     }
 
     private function guestInsights(string $startAt, string $endAt): array
@@ -241,19 +239,19 @@ final class ReportService
         return $this->db->fetchAll('SELECT u.name user_name, COUNT(DISTINCT b.id) bookings, COUNT(DISTINCT p.id) payments, COALESCE(SUM(p.amount),0) revenue_handled, COUNT(DISTINCT e.id) expenses, COALESCE(SUM(e.amount),0) expenses_recorded, COUNT(DISTINCT sm.id) stock_movements, SUM(b.status="cancelled") cancellations, "N/A" discounts FROM users u LEFT JOIN bookings b ON b.created_by=u.id AND b.created_at BETWEEN ? AND ? LEFT JOIN payments p ON p.created_by=u.id AND p.created_at BETWEEN ? AND ? AND p.voided_at IS NULL LEFT JOIN expenses e ON e.user_id=u.id AND e.created_at BETWEEN ? AND ? AND e.voided_at IS NULL LEFT JOIN stock_movements sm ON sm.created_by=u.id AND sm.created_at BETWEEN ? AND ? GROUP BY u.id, u.name ORDER BY revenue_handled DESC', [$startAt, $endAt, $startAt, $endAt, $startAt, $endAt, $startAt, $endAt]);
     }
 
-    private function anomalies(): array
+    private function anomalies(string $startAt, string $endAt): array
     {
         $issues = [];
-        foreach ($this->db->fetchAll('SELECT b.id FROM bookings b LEFT JOIN payments p ON p.booking_id=b.id AND p.voided_at IS NULL WHERE b.status <> "cancelled" GROUP BY b.id HAVING COALESCE(SUM(p.amount),0)=0 LIMIT 50') as $row) { $issues[] = $this->issue('High', 'Booking with no payment', 'Booking #' . $row['id'] . ' has no non-voided payment.', 'booking', (string)$row['id'], 'Record payment or verify the booking.'); }
-        foreach ($this->db->fetchAll('SELECT b.id FROM bookings b JOIN payments p ON p.booking_id=b.id AND p.voided_at IS NULL WHERE b.status="cancelled" GROUP BY b.id LIMIT 50') as $row) { $issues[] = $this->issue('High', 'Cancelled booking with payment', 'Cancelled booking #' . $row['id'] . ' still has payment records.', 'booking', (string)$row['id'], 'Review refund or void workflow.'); }
+        foreach ($this->db->fetchAll('SELECT b.id FROM bookings b LEFT JOIN payments p ON p.booking_id=b.id AND p.voided_at IS NULL WHERE b.status <> "cancelled" AND b.created_at BETWEEN ? AND ? GROUP BY b.id HAVING COALESCE(SUM(p.amount),0)=0 LIMIT 50', [$startAt, $endAt]) as $row) { $issues[] = $this->issue('High', 'Booking with no payment', 'Booking #' . $row['id'] . ' has no non-voided payment.', 'booking', (string)$row['id'], 'Record payment or verify the booking.'); }
+        foreach ($this->db->fetchAll('SELECT b.id FROM bookings b JOIN payments p ON p.booking_id=b.id AND p.voided_at IS NULL WHERE b.status="cancelled" AND COALESCE(b.updated_at, b.created_at) BETWEEN ? AND ? GROUP BY b.id LIMIT 50', [$startAt, $endAt]) as $row) { $issues[] = $this->issue('High', 'Cancelled booking with payment', 'Cancelled booking #' . $row['id'] . ' still has payment records.', 'booking', (string)$row['id'], 'Review refund or void workflow.'); }
         foreach ($this->db->fetchAll('SELECT id, name, stock_qty FROM extras WHERE stock_tracked=1 AND stock_qty < 0 LIMIT 50') as $row) { $issues[] = $this->issue('High', 'Negative stock', $row['name'] . ' has stock ' . $row['stock_qty'] . '.', 'extra', (string)$row['id'], 'Review stock movements and correct inventory.'); }
         foreach ($this->db->fetchAll('SELECT id, name FROM extras WHERE active=1 AND stock_tracked=1 AND stock_qty <= 0 LIMIT 50') as $row) { $issues[] = $this->issue('Medium', 'Out of stock product', $row['name'] . ' is out of stock.', 'extra', (string)$row['id'], 'Restock or mark inactive.'); }
         foreach ($this->db->fetchAll('SELECT name FROM extras WHERE active=1 GROUP BY name HAVING COUNT(*) > 1 LIMIT 50') as $row) { $issues[] = $this->issue('Medium', 'Duplicate product name', $row['name'] . ' appears more than once.', 'extra', '', 'Merge or rename duplicate products.'); }
         foreach ($this->db->fetchAll('SELECT name FROM rooms WHERE active=1 GROUP BY name HAVING COUNT(*) > 1 LIMIT 50') as $row) { $issues[] = $this->issue('Medium', 'Duplicate active room number', $row['name'] . ' appears more than once.', 'room', '', 'Rename or deactivate duplicates.'); }
         foreach ($this->db->fetchAll('SELECT id FROM bookings WHERE checkout_at IS NOT NULL AND checkout_at < checkin_at LIMIT 50') as $row) { $issues[] = $this->issue('High', 'Checkout before check-in', 'Booking #' . $row['id'] . ' has invalid dates.', 'booking', (string)$row['id'], 'Correct booking dates.'); }
         foreach ($this->db->fetchAll('SELECT id FROM bookings WHERE status="checked_out" AND checkout_at IS NULL LIMIT 50') as $row) { $issues[] = $this->issue('Medium', 'Missing checkout date', 'Checked-out booking #' . $row['id'] . ' has no checkout date.', 'booking', (string)$row['id'], 'Update checkout date.'); }
-        foreach ($this->db->fetchAll('SELECT id FROM expenses WHERE vendor IS NULL OR vendor="" LIMIT 50') as $row) { $issues[] = $this->issue('Low', 'Expense without vendor', 'Expense #' . $row['id'] . ' has no vendor.', 'expense', (string)$row['id'], 'Add vendor where applicable.'); }
-        foreach ($this->db->fetchAll('SELECT id FROM stock_movements WHERE movement_type="adjustment" ORDER BY created_at DESC LIMIT 50') as $row) { $issues[] = $this->issue('Low', 'Manual stock adjustment', 'Stock movement #' . $row['id'] . ' is a manual adjustment.', 'stock_movement', (string)$row['id'], 'Verify adjustment note and approval.'); }
+        foreach ($this->db->fetchAll('SELECT id FROM expenses WHERE (vendor IS NULL OR vendor="") AND created_at BETWEEN ? AND ? LIMIT 50', [$startAt, $endAt]) as $row) { $issues[] = $this->issue('Low', 'Expense without vendor', 'Expense #' . $row['id'] . ' has no vendor.', 'expense', (string)$row['id'], 'Add vendor where applicable.'); }
+        foreach ($this->db->fetchAll('SELECT id FROM stock_movements WHERE movement_type="adjustment" AND created_at BETWEEN ? AND ? ORDER BY created_at DESC LIMIT 50', [$startAt, $endAt]) as $row) { $issues[] = $this->issue('Low', 'Manual stock adjustment', 'Stock movement #' . $row['id'] . ' is a manual adjustment.', 'stock_movement', (string)$row['id'], 'Verify adjustment note and approval.'); }
         return $issues;
     }
 
@@ -281,9 +279,9 @@ final class ReportService
         return ['room_id' => !empty($query['room_id']) ? (int)$query['room_id'] : null, 'room_type' => trim((string)($query['room_type'] ?? '')), 'payment_method' => trim((string)($query['payment_method'] ?? '')), 'expense_category_id' => !empty($query['expense_category_id']) ? (int)$query['expense_category_id'] : null, 'staff_id' => !empty($query['staff_id']) ? (int)$query['staff_id'] : null];
     }
 
-    private function outstandingTotal(): float
+    private function outstandingTotal(string $start, string $end): float
     {
-        return $this->scalar('SELECT COALESCE(SUM(balance_due),0) FROM (SELECT GREATEST(0, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) - COALESCE(p.paid_total,0)) balance_due FROM bookings b LEFT JOIN (SELECT booking_id, SUM(qty*unit_price) extras_total FROM booking_extras WHERE voided_at IS NULL GROUP BY booking_id) be ON be.booking_id=b.id LEFT JOIN (SELECT booking_id, SUM(amount) paid_total FROM payments WHERE voided_at IS NULL GROUP BY booking_id) p ON p.booking_id=b.id WHERE b.status IN ("active","checked_out")) x');
+        return $this->scalar('SELECT COALESCE(SUM(balance_due),0) FROM (SELECT GREATEST(0, ((GREATEST(1, DATEDIFF(DATE(COALESCE(b.checkout_at, UTC_TIMESTAMP())), DATE(b.checkin_at))) * b.rate_per_night) + COALESCE(be.extras_total,0)) - COALESCE(p.paid_total,0)) balance_due FROM bookings b LEFT JOIN (SELECT booking_id, SUM(qty*unit_price) extras_total FROM booking_extras WHERE voided_at IS NULL GROUP BY booking_id) be ON be.booking_id=b.id LEFT JOIN (SELECT booking_id, SUM(amount) paid_total FROM payments WHERE voided_at IS NULL GROUP BY booking_id) p ON p.booking_id=b.id WHERE b.status IN ("active","checked_out") AND DATE(b.checkin_at) BETWEEN ? AND ?) x', [$start, $end]);
     }
 
     private function paymentsByDay(string $start, string $end): array
@@ -312,7 +310,7 @@ final class ReportService
     private function maskName(string $name): string
     {
         $name = trim($name);
-        return $name === '' ? 'Guest' : mb_substr($name, 0, 1) . '***';
+        return $name === '' ? 'Guest' : substr($name, 0, 1) . '***';
     }
 
     private function maskContact(string $contact): string

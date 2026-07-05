@@ -289,3 +289,9 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
   .reports-grid { grid-template-columns: 1fr 1fr; }
   .report-chart canvas { height: 220px !important; }
 }
+.report-tabs { display: flex; flex-wrap: wrap; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.report-tab { background: #fff; border: 1px solid var(--line); border-radius: 7px; color: #475569; font-weight: 700; padding: 9px 12px; }
+.report-tab.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+.report-table-pager { align-items: center; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; }
+@media (max-width: 575.98px) { .report-tabs { display: grid; grid-template-columns: 1fr; } .report-table-pager { align-items: stretch; flex-direction: column; } .report-table-pager .btn-group { display: grid; grid-template-columns: 1fr 1fr; } }
+@media print { .report-tabs, .report-table-pager { display: none !important; } [data-report-panel].d-none { display: block !important; } }

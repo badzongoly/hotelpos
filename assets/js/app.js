@@ -36,7 +36,7 @@
   function tableCell(column, value) {
     return esc(isDateColumn(column) ? formatDateTime(value) : value);
   }
-  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null, reports: null, reportCharts: {}, reportExports: [] };
+  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null, reports: null, reportCharts: {}, reportExports: [], reportTablePages: {}, reportTab: 'overview' };
   let modal;
 
   // Initialize Bootstrap widgets, bind event handlers, restore the session,
@@ -650,6 +650,7 @@
     try {
       const data = await api.get(`/reports/analytics?${params.toString()}`);
       state.reports = data;
+      state.reportTablePages = {};
       populateReportFilters(data.options || {});
       renderReports(data);
     } catch (err) {
@@ -677,12 +678,29 @@
     state.reportExports = [];
     const d = data.dashboard || {};
     const cards = [
-      ['Today Revenue', money(d.today_revenue)], ['MTD Revenue', money(d.mtd_revenue)], ['MTD Expenses', money(d.mtd_expenses)], ['MTD Net Cashflow', money(d.mtd_cashflow)],
-      ['Occupancy', pct(d.current_occupancy_rate)], ['Occupied', d.occupied_rooms || 0], ['Vacant', d.vacant_rooms || 0], ['Dirty', d.dirty_rooms || 0],
-      ['Maintenance', d.maintenance_rooms || 0], ['Outstanding', money(d.outstanding_balances)], ['Extras Today', money(d.extras_sales_today)], ['Low Stock', d.low_stock_count || 0], ['Pending Check-outs', d.pending_checkouts || 0], ['Cancelled MTD', d.cancelled_bookings_month || 0]
+      ['Range Revenue', money(d.today_revenue)], ['Range Payments', money(d.mtd_revenue)], ['Range Expenses', money(d.mtd_expenses)], ['Range Net Cashflow', money(d.mtd_cashflow)],
+      ['Current Occupancy', pct(d.current_occupancy_rate)], ['Occupied', d.occupied_rooms || 0], ['Vacant', d.vacant_rooms || 0], ['Dirty', d.dirty_rooms || 0],
+      ['Maintenance', d.maintenance_rooms || 0], ['Range Outstanding', money(d.outstanding_balances)], ['Range Extras', money(d.extras_sales_today)], ['Low Stock', d.low_stock_count || 0], ['Pending Check-outs', d.pending_checkouts || 0], ['Range Cancelled', d.cancelled_bookings_month || 0]
     ];
-    $('#reportsPanel').innerHTML = `<div class="report-range-note">${esc(data.filters.start)} to ${esc(data.filters.end)} &middot; ${esc((data.meta?.notes || []).join(' '))}</div><div class="report-kpi-grid">${cards.map(([label, value]) => `<div class="metric"><div class="metric-label">${esc(label)}</div><div class="value">${value}</div></div>`).join('')}</div><div class="reports-grid mt-3">${reportCanvas('cashflowChart', 'Monthly Cashflow')}${reportCanvas('roomRevenueChart', 'Top Rooms by Revenue')}${reportCanvas('occupancyChart', 'Occupancy Rate')}${reportCanvas('extrasChart', 'Extras by Revenue')}${reportCanvas('expensesChart', 'Expenses by Category')}${reportCanvas('paymentChart', 'Payment Method Split')}</div>${reportSection('Monthly Revenue & Cashflow', reportTable('monthly_cashflow', data.monthly_cashflow?.rows || [], ['month','revenue','expenses','net_cashflow','room_revenue','extras_revenue','other_revenue','revenue_growth_pct']))}${reportSection('Room Performance', reportTable('room_performance', data.room_performance?.rows || [], ['name','type','rate','bookings','occupied_nights','total_revenue','avg_revenue_per_booking','adr','revpar','extras_revenue','cancellations','avg_los','discount_amount','net_room_revenue']))}${reportSection('Occupancy', reportTable('occupancy_daily', data.occupancy?.daily || [], ['date','available_rooms','occupied_rooms','occupancy_pct']))}${reportSection('Extras / Bar Sales', reportTable('extras_products', data.extras?.products || [], ['product','category','quantity_sold','revenue','cost','gross_margin','current_stock']))}${reportSection('Expenses', reportTable('expenses_details', data.expenses?.details || [], ['expense_date','category','vendor','description','method','user_name','amount','expense_type']))}${reportSection('Stock & Low Inventory', reportTable('stock_products', data.stock?.products || [], ['product','category','current_stock','reorder_level','unit_cost','estimated_value']))}${reportSection('Payment Methods', reportTable('payment_methods', data.payments?.by_method || [], ['method','count','amount','percentage']))}${reportSection('Outstanding Balances', reportTable('outstanding_balances', data.outstanding_balances?.rows || [], ['guest_name','room','checkin_at','checkout_at','booking_total','amount_paid','balance_due','status','created_by','payment_staff','days_overdue']))}${reportSection('Discounts & Cancellations', reportTable('discount_cancellations', data.discounts_cancellations?.rows || [], ['booking_id','room','original_amount','discount','cancelled_amount','reason','user_name']))}${reportSection('Guest Insights', reportTable('guest_nationality', data.guests?.nationality_mix || [], ['nationality','total']) + reportTable('guest_gender', data.guests?.gender_mix || [], ['gender','total']))}${reportSection('Staff Accountability', reportTable('staff_accountability', data.staff?.rows || [], ['user_name','bookings','payments','revenue_handled','expenses','expenses_recorded','stock_movements','discounts','cancellations']))}${reportSection('Audit & Anomaly Flags', reportTable('audit_anomalies', data.anomalies?.issues || [], ['severity','type','description','entity','entity_id','suggested_action']))}`;
+    const tabs = [
+      ['overview', 'Overview'], ['rooms', 'Rooms & Occupancy'], ['sales', 'Sales & Expenses'], ['inventory', 'Inventory & Balances'], ['people', 'Guests & Staff'], ['audit', 'Audit Issues']
+    ];
+    $('#reportsPanel').innerHTML = `<div class="report-range-note">${esc(data.filters.start)} to ${esc(data.filters.end)} &middot; ${esc((data.meta?.notes || []).join(' '))}</div><div class="report-kpi-grid">${cards.map(([label, value]) => `<div class="metric"><div class="metric-label">${esc(label)}</div><div class="value">${value}</div></div>`).join('')}</div><div class="report-tabs mt-3" role="tablist">${tabs.map(([id, label]) => `<button class="report-tab ${state.reportTab === id ? 'active' : ''}" type="button" data-report-tab="${id}">${esc(label)}</button>`).join('')}</div><div data-report-panel="overview" class="${state.reportTab === 'overview' ? '' : 'd-none'}"><div class="reports-grid mt-3">${reportCanvas('cashflowChart', 'Monthly Cashflow')}${reportCanvas('paymentChart', 'Payment Method Split')}</div>${reportSection('Monthly Revenue & Cashflow', reportTable('monthly_cashflow', data.monthly_cashflow?.rows || [], ['month','revenue','expenses','net_cashflow','room_revenue','extras_revenue','other_revenue','revenue_growth_pct']))}${reportSection('Payment Methods', reportTable('payment_methods', data.payments?.by_method || [], ['method','count','amount','percentage']))}</div><div data-report-panel="rooms" class="${state.reportTab === 'rooms' ? '' : 'd-none'}"><div class="reports-grid mt-3">${reportCanvas('roomRevenueChart', 'Top Rooms by Revenue')}${reportCanvas('occupancyChart', 'Occupancy Rate')}</div>${reportSection('Room Performance', reportTable('room_performance', data.room_performance?.rows || [], ['name','type','rate','bookings','occupied_nights','total_revenue','avg_revenue_per_booking','adr','revpar','extras_revenue','cancellations','avg_los','discount_amount','net_room_revenue']))}${reportSection('Occupancy', reportTable('occupancy_daily', data.occupancy?.daily || [], ['date','available_rooms','occupied_rooms','occupancy_pct']))}</div><div data-report-panel="sales" class="${state.reportTab === 'sales' ? '' : 'd-none'}"><div class="reports-grid mt-3">${reportCanvas('extrasChart', 'Extras by Revenue')}${reportCanvas('expensesChart', 'Expenses by Category')}</div>${reportSection('Extras / Bar Sales', reportTable('extras_products', data.extras?.products || [], ['product','category','quantity_sold','revenue','cost','gross_margin','current_stock']))}${reportSection('Expenses', reportTable('expenses_details', data.expenses?.details || [], ['expense_date','category','vendor','description','method','user_name','amount','expense_type']))}${reportSection('Discounts & Cancellations', reportTable('discount_cancellations', data.discounts_cancellations?.rows || [], ['booking_id','room','original_amount','discount','cancelled_amount','reason','user_name']))}</div><div data-report-panel="inventory" class="${state.reportTab === 'inventory' ? '' : 'd-none'}">${reportSection('Stock & Low Inventory', reportTable('stock_products', data.stock?.products || [], ['product','category','current_stock','reorder_level','unit_cost','estimated_value']))}${reportSection('Outstanding Balances', reportTable('outstanding_balances', data.outstanding_balances?.rows || [], ['guest_name','room','checkin_at','checkout_at','booking_total','amount_paid','balance_due','status','created_by','payment_staff','days_overdue']))}</div><div data-report-panel="people" class="${state.reportTab === 'people' ? '' : 'd-none'}">${reportSection('Guest Insights', reportTable('guest_nationality', data.guests?.nationality_mix || [], ['nationality','total']) + reportTable('guest_gender', data.guests?.gender_mix || [], ['gender','total']))}${reportSection('Staff Accountability', reportTable('staff_accountability', data.staff?.rows || [], ['user_name','bookings','payments','revenue_handled','expenses','expenses_recorded','stock_movements','discounts','cancellations']))}</div><div data-report-panel="audit" class="${state.reportTab === 'audit' ? '' : 'd-none'}">${reportSection('Audit & Anomaly Flags', reportTable('audit_anomalies', data.anomalies?.issues || [], ['severity','type','description','entity','entity_id','suggested_action']))}</div>`;
+    bindReportControls();
     renderReportCharts(data);
+  }
+
+  function bindReportControls() {
+    document.querySelectorAll('[data-report-tab]').forEach(btn => btn.addEventListener('click', () => {
+      state.reportTab = btn.dataset.reportTab;
+      renderReports(state.reports);
+    }));
+    document.querySelectorAll('[data-report-table-page]').forEach(btn => btn.addEventListener('click', () => {
+      const name = btn.dataset.reportTablePage;
+      const page = Number(state.reportTablePages[name] || 1);
+      state.reportTablePages[name] = btn.dataset.reportPageDirection === 'next' ? page + 1 : Math.max(1, page - 1);
+      renderReports(state.reports);
+    }));
   }
 
   function reportCanvas(id, title) { return `<div class="surface report-chart"><h5>${esc(title)}</h5><canvas id="${id}"></canvas></div>`; }
@@ -692,9 +710,14 @@
   function reportTable(exportName, rows, cols) {
     state.reportExports.push({ name: exportName, rows, cols });
     if (!rows.length) return '<div class="empty-state">No records for this period.</div>';
-    return `<div class="table-responsive"><table class="table table-sm table-striped app-table"><thead><tr>${cols.map(c => `<th>${esc(c.replaceAll('_',' '))}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${cols.map(c => `<td>${formatReportCell(c, row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const perPage = 10;
+    const pages = Math.max(1, Math.ceil(rows.length / perPage));
+    const page = Math.min(Math.max(1, Number(state.reportTablePages[exportName] || 1)), pages);
+    state.reportTablePages[exportName] = page;
+    const visibleRows = rows.slice((page - 1) * perPage, page * perPage);
+    const pager = `<div class="report-table-pager"><span>${rows.length} record${rows.length === 1 ? '' : 's'} &middot; Page ${page} of ${pages}</span><div class="btn-group"><button class="btn btn-outline-secondary btn-sm" type="button" data-report-table-page="${exportName}" data-report-page-direction="prev" ${page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn btn-outline-secondary btn-sm" type="button" data-report-table-page="${exportName}" data-report-page-direction="next" ${page >= pages ? 'disabled' : ''}>Next</button></div></div>`;
+    return `<div class="table-responsive"><table class="table table-sm table-striped app-table"><thead><tr>${cols.map(c => `<th>${esc(c.replaceAll('_',' '))}</th>`).join('')}</tr></thead><tbody>${visibleRows.map(row => `<tr>${cols.map(c => `<td>${formatReportCell(c, row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>${pager}`;
   }
-
   function formatReportCell(column, value) {
     if (value === null || value === undefined) return 'N/A';
     if (isDateColumn(column) || column === 'date' || column === 'month') return esc(column === 'month' ? value : formatDateTime(value));
