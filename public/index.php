@@ -77,7 +77,24 @@ if ($base === '/' || $base === '\\') {
           <div class="col-12 col-xl-5"><div class="surface"><h5>Recent Activity</h5><div id="recentActivity"></div></div></div>
         </div>
       </section>
-      <section class="d-none" data-panel="rooms"><div class="page-header"><div><h2>Rooms</h2><p>Rates, availability, and occupancy settings.</p></div><button class="btn btn-primary" id="newRoomButton">New Room</button></div><div id="roomsList" class="table-responsive surface"></div></section>
+            <section class="d-none" data-panel="rooms">
+        <div class="page-header"><div><h2>Rooms</h2></div><button class="btn btn-outline-primary" id="newRoomButton">Focus New Room</button></div>
+        <div class="rooms-layout">
+          <form id="newRoomForm" class="surface room-inline-form" novalidate>
+            <div class="form-panel-heading"><h5>New Room</h5><span>Add rooms and service spaces without leaving the list.</span></div>
+            <div class="row g-3">
+              <div class="col-md-6"><label class="form-label">Name <span class="text-danger">*</span></label><input name="name" class="form-control" required></div>
+              <div class="col-md-6"><label class="form-label">Type <span class="text-danger">*</span></label><input name="type" class="form-control" required></div>
+              <div class="col-md-4"><label class="form-label">Rate <span class="text-danger">*</span></label><input name="rate" type="number" step="0.01" min="0" class="form-control" required></div>
+              <div class="col-md-4"><label class="form-label">Active</label><select name="active" class="form-select"><option value="1">Yes</option><option value="0">No</option></select></div>
+              <div class="col-md-4"><label class="form-label">Occupancy Counted</label><select name="occupancy_counted" class="form-select"><option value="1">Yes</option><option value="0">No</option></select></div>
+            </div>
+            <div class="alert d-none" id="newRoomStatus"></div>
+            <div class="room-inline-actions"><button class="btn btn-primary" type="submit">Save Room</button><button class="btn btn-outline-secondary" type="reset">Clear</button></div>
+          </form>
+          <div id="roomsList" class="table-responsive surface"></div>
+        </div>
+      </section>
       <section class="d-none" data-panel="bookings">
         <div class="page-header"><div><h2>Bookings</h2><p>Available rooms, current stays, and previous bookings.</p></div></div>
         <div class="booking-tabs mb-3" role="tablist" aria-label="Booking views">

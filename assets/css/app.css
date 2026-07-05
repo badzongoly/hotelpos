@@ -235,4 +235,20 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
   .topbar-actions .btn { flex: 1; }
   .booking-room-grid { gap: 12px; }
 }
+.rooms-layout { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.room-inline-form { display: grid; gap: 16px; position: sticky; top: 84px; }
+.form-panel-heading { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.form-panel-heading h5 { margin: 0 0 4px; }
+.form-panel-heading span { color: var(--muted); font-size: 14px; }
+.room-inline-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.room-inline-form .alert { margin-bottom: 0; }
+.room-inline-form.was-validated .form-control:invalid { border-color: #dc3545; }
+.room-inline-form.was-validated .form-control:valid { border-color: #198754; }
+@media (max-width: 1199.98px) {
+  .rooms-layout { grid-template-columns: 1fr; }
+  .room-inline-form { position: static; }
+}
+@media (max-width: 575.98px) {
+  .room-inline-actions { flex-direction: column; }
+}
 

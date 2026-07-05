@@ -63,7 +63,9 @@
       document.body.classList.remove('sidebar-open');
     }));
     $('[data-refresh="dashboard"]')?.addEventListener('click', () => loadDashboard());
-    $('#newRoomButton')?.addEventListener('click', roomForm);
+    $('#newRoomButton')?.addEventListener('click', focusNewRoomForm);
+    $('#newRoomForm')?.addEventListener('submit', createRoomInline);
+    $('#newRoomForm')?.addEventListener('reset', () => showNewRoomStatus('', 'd-none'));
     $('#newExtraButton')?.addEventListener('click', extraForm);
     $('#newStockButton')?.addEventListener('click', stockForm);
     $('#newExpenseButton')?.addEventListener('click', expenseForm);
@@ -286,11 +288,11 @@
   function renderRooms() {
     const canEdit = ['administrator', 'manager'].includes(state.user?.role);
     if (!state.rooms.length) {
-      $('#roomsList').innerHTML = '<div class="text-secondary py-3">No rooms found.</div>';
+      $('#roomsList').innerHTML = '<div class="empty-state">No rooms found.</div>';
       return;
     }
 
-    $('#roomsList').innerHTML = `<table class="table table-sm table-striped rooms-table"><thead><tr><th>Name</th><th>Type</th><th>Rate</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>${state.rooms.map(room => `<tr><td>${esc(room.name)}</td><td>${esc(room.type)}</td><td>${money(room.rate)}</td><td><span class="badge ${roomStatusClass(room.status)}">${esc(room.status)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-room-view="${room.id}">View</button>${canEdit ? ` <button class="btn btn-sm btn-outline-primary" data-room-edit="${room.id}">Edit</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    $('#roomsList').innerHTML = `<table class="table table-sm table-striped app-table rooms-table"><thead><tr><th>Name</th><th>Type</th><th>Rate</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>${state.rooms.map(room => `<tr><td>${esc(room.name)}</td><td>${esc(room.type)}</td><td>${money(room.rate)}</td><td><span class="badge ${roomStatusClass(room.status)}">${esc(room.status)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-room-view="${room.id}">View</button>${canEdit ? ` <button class="btn btn-sm btn-outline-primary" data-room-edit="${room.id}">Edit</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
     document.querySelectorAll('[data-room-view]').forEach(btn => btn.addEventListener('click', () => viewRoom(btn.dataset.roomView)));
     document.querySelectorAll('[data-room-edit]').forEach(btn => btn.addEventListener('click', () => roomForm(roomById(btn.dataset.roomEdit))));
   }
@@ -302,6 +304,64 @@
   function roomStatusClass(status) {
     return ({ vacant: 'text-bg-success', occupied: 'text-bg-primary', dirty: 'text-bg-warning', maintenance: 'text-bg-danger' })[status] || 'text-bg-secondary';
   }
+
+  function focusNewRoomForm() {
+    const form = $('#newRoomForm');
+    form?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form?.querySelector('input[name="name"]')?.focus();
+  }
+
+  function showNewRoomStatus(message, className = 'd-none') {
+    const status = $('#newRoomStatus');
+    if (!status) return;
+    status.className = `alert ${className}`;
+    status.textContent = message;
+  }
+
+  function resetNewRoomForm(event) {
+    event.currentTarget.classList.remove('was-validated');
+    showNewRoomStatus('', 'd-none');
+  }
+
+  function validateNewRoomForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const errors = [];
+    if (!String(data.name || '').trim()) errors.push('Room name is required.');
+    if (!String(data.type || '').trim()) errors.push('Room type is required.');
+    if (String(data.rate || '').trim() === '') errors.push('Rate is required.');
+    if (String(data.rate || '').trim() !== '' && Number(data.rate) < 0) errors.push('Rate cannot be negative.');
+    return { data, errors };
+  }
+
+  async function createRoomInline(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector('button[type="submit"]');
+    const { data, errors } = validateNewRoomForm(form);
+
+    form.classList.add('was-validated');
+    if (errors.length) {
+      showNewRoomStatus(errors.join(' '), 'alert-danger');
+      return;
+    }
+
+    showNewRoomStatus('', 'd-none');
+    submit.disabled = true;
+    submit.textContent = 'Saving...';
+    try {
+      await api.post('/rooms/save', data);
+      form.reset();
+      form.classList.remove('was-validated');
+      showNewRoomStatus('Room saved successfully.', 'alert-success');
+      await loadRooms();
+    } catch (err) {
+      showNewRoomStatus(err.message, 'alert-danger');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Save Room';
+    }
+  }
+
 
   function viewRoom(id) {
     const room = roomById(id);
