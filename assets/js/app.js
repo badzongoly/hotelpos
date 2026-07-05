@@ -180,8 +180,12 @@
   async function loadDashboard() {
     const d = await api.get('/dashboard');
     $('#dashboardCards').innerHTML = [
-      ['Rooms', d.rooms.total], ['Occupied', d.rooms.occupied], ['Vacant', d.rooms.vacant], ['Extras Sold Today', extrasSoldAmount(d.extras_sold_today)], ['Today Revenue', money(d.today_revenue)]
-    ].map(([label, value]) => `<div class="col-12 col-md"><div class="metric"><div class="text-secondary">${label}</div><div class="value">${value}</div></div></div>`).join('');
+      ['Rooms', d.rooms.total, 'rooms'],
+      ['Occupied', d.rooms.occupied, 'occupied'],
+      ['Vacant', d.rooms.vacant, 'vacant'],
+      ['Extras Sold Today', extrasSoldAmount(d.extras_sold_today), 'extras'],
+      ['Today Revenue', money(d.today_revenue), 'revenue']
+    ].map(([label, value, tone]) => `<div class="col-12 col-md"><div class="metric metric-${tone}"><div class="metric-label">${label}</div><div class="value">${value}</div></div></div>`).join('');
     $('#recentActivity').innerHTML = table(d.recent_activity || [], ['created_at', 'action', 'entity', 'user_name']);
     renderRevenue(d.daily_revenue || []);
     renderMonthlyExtras(d.extras_sold_month || []);
@@ -546,8 +550,8 @@
 
   // Generic table renderer for simple admin/reference lists.
   function table(rows, cols) {
-    if (!rows.length) return '<div class="text-secondary py-3">No records found.</div>';
-    return `<table class="table table-sm table-striped"><thead><tr>${cols.map(c => `<th>${c.replaceAll('_', ' ')}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${tableCell(c, r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    if (!rows.length) return '<div class="empty-state">No records found.</div>';
+    return `<table class="table table-sm table-striped app-table"><thead><tr>${cols.map(c => `<th>${c.replaceAll('_', ' ')}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${tableCell(c, r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
 
   // Shared modal form wrapper used by the small CRUD/workflow forms below.

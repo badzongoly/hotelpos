@@ -62,24 +62,24 @@ if ($base === '/' || $base === '\\') {
 
   <div class="content">
     <header class="topbar">
-      <button class="btn btn-outline-secondary d-lg-none" id="menuButton">Menu</button>
-      <div><strong id="currentUser"><?php echo htmlspecialchars($user['name'] ?? ''); ?></strong> <span class="text-secondary" id="currentRole"><?php echo htmlspecialchars($user['role'] ?? ''); ?></span></div>
-      <div class="d-flex align-items-center gap-2"><button class="btn btn-outline-primary btn-sm" id="resetPasswordButton">Reset password</button><button class="btn btn-outline-danger btn-sm" id="logoutButton">Logout</button></div>
+      <button class="btn btn-outline-secondary d-lg-none menu-toggle" id="menuButton" aria-label="Open menu">Menu</button>
+      <div class="topbar-identity"><strong id="currentUser"><?php echo htmlspecialchars($user['name'] ?? ''); ?></strong><span class="text-secondary" id="currentRole"><?php echo htmlspecialchars($user['role'] ?? ''); ?></span></div>
+      <div class="topbar-actions"><button class="btn btn-outline-primary btn-sm" id="resetPasswordButton">Reset password</button><button class="btn btn-outline-danger btn-sm" id="logoutButton">Logout</button></div>
     </header>
 
     <!-- Panels stay in the DOM and are shown/hidden as the user navigates. -->
     <main class="container-fluid py-4">
       <section data-panel="dashboard">
-        <div class="d-flex justify-content-between align-items-center mb-3"><h2>Dashboard</h2><button class="btn btn-outline-primary" data-refresh="dashboard">Refresh</button></div>
+        <div class="page-header"><div><h2>Dashboard</h2><p>Today's rooms, sales, and recent activity.</p></div><button class="btn btn-outline-primary" data-refresh="dashboard">Refresh</button></div>
         <div class="row g-3" id="dashboardCards"></div>
         <div class="row g-3 mt-1">
           <div class="col-12 col-xl-7"><div class="surface chart-surface"><h5>Revenue</h5><div class="chart-box"><canvas id="revenueChart"></canvas></div><div class="extras-month-panel"><h5>Extras Sold This Month</h5><div class="extras-chart-box"><canvas id="extrasMonthChart"></canvas></div></div></div></div>
           <div class="col-12 col-xl-5"><div class="surface"><h5>Recent Activity</h5><div id="recentActivity"></div></div></div>
         </div>
       </section>
-      <section class="d-none" data-panel="rooms"><div class="d-flex justify-content-between align-items-center mb-3"><h2>Rooms</h2><button class="btn btn-primary" id="newRoomButton">New Room</button></div><div id="roomsList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="rooms"><div class="page-header"><div><h2>Rooms</h2><p>Rates, availability, and occupancy settings.</p></div><button class="btn btn-primary" id="newRoomButton">New Room</button></div><div id="roomsList" class="table-responsive surface"></div></section>
       <section class="d-none" data-panel="bookings">
-        <div class="d-flex justify-content-between align-items-center mb-3"><h2>Bookings</h2></div>
+        <div class="page-header"><div><h2>Bookings</h2><p>Available rooms, current stays, and previous bookings.</p></div></div>
         <div class="booking-tabs mb-3" role="tablist" aria-label="Booking views">
           <button class="booking-tab active" type="button" data-bookings-tab="current">Current Stay</button>
           <button class="booking-tab" type="button" data-bookings-tab="history">Previous Bookings</button>
@@ -100,13 +100,13 @@ if ($base === '/' || $base === '\\') {
           <div id="bookingHistoryPager" class="booking-history-pager mt-3"></div>
         </div>
       </section>
-      <section class="d-none" data-panel="extras"><div class="d-flex justify-content-between align-items-center mb-3"><h2>Extras</h2><button class="btn btn-primary" id="newExtraButton">New Extra</button></div><div id="extrasList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="stock"><div class="d-flex justify-content-between align-items-center mb-3"><h2>Stock</h2><button class="btn btn-primary" id="newStockButton">Record Movement</button></div><div id="stockList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="payments"><h2>Payments</h2><div id="paymentsList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="expenses"><div class="d-flex justify-content-between align-items-center mb-3"><h2>Expenses</h2><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="reports"><h2>Reports</h2><div id="reportsPanel" class="surface"></div></section>
-      <section class="d-none" data-panel="users"><div class="d-flex justify-content-between align-items-center mb-3"><h2>Users</h2><button class="btn btn-primary" id="newUserButton">New User</button></div><div id="usersList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="audit"><h2>Audit Logs</h2><div id="auditList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="extras"><div class="page-header"><div><h2>Extras</h2><p>Sale items and stock-tracked products.</p></div><button class="btn btn-primary" id="newExtraButton">New Extra</button></div><div id="extrasList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="stock"><div class="page-header"><div><h2>Stock</h2><p>Inventory movements, adjustments, returns, and waste.</p></div><button class="btn btn-primary" id="newStockButton">Record Movement</button></div><div id="stockList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="payments"><div class="page-header"><div><h2>Payments</h2><p>Received payments and void status.</p></div></div><div id="paymentsList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="expenses"><div class="page-header"><div><h2>Expenses</h2><p>Operating expenses and reporting categories.</p></div><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="reports"><div class="page-header"><div><h2>Reports</h2><p>Revenue, expenses, net income, and payment methods.</p></div></div><div id="reportsPanel" class="surface"></div></section>
+      <section class="d-none" data-panel="users"><div class="page-header"><div><h2>Users</h2><p>Staff access and role permissions.</p></div><button class="btn btn-primary" id="newUserButton">New User</button></div><div id="usersList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="audit"><div class="page-header"><div><h2>Audit Logs</h2><p>Operational and financial change history.</p></div></div><div id="auditList" class="table-responsive surface"></div></section>
     </main>
   </div>
 </div>
@@ -120,5 +120,4 @@ if ($base === '/' || $base === '\\') {
 <script src="<?php echo htmlspecialchars($base); ?>/../assets/js/app.js"></script>
 </body>
 </html>
-
 
