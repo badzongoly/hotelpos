@@ -117,13 +117,79 @@ if ($base === '/' || $base === '\\') {
           <div id="bookingHistoryPager" class="booking-history-pager mt-3"></div>
         </div>
       </section>
-      <section class="d-none" data-panel="extras"><div class="page-header"><div><h2>Extras</h2><p>Sale items and stock-tracked products.</p></div><button class="btn btn-primary" id="newExtraButton">New Extra</button></div><div id="extrasList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="stock"><div class="page-header"><div><h2>Stock</h2><p>Inventory movements, adjustments, returns, and waste.</p></div><button class="btn btn-primary" id="newStockButton">Record Movement</button></div><div id="stockList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="extras">
+        <div class="page-header"><div><h2>Extras</h2></div></div>
+        <div class="entity-layout">
+          <form id="extraForm" class="surface room-inline-form" novalidate>
+            <input type="hidden" name="id" value="">
+            <div class="form-panel-heading"><h5 id="extraFormTitle">New Extra</h5><span>Keep sale items clear, priced, and ready for booking charges.</span></div>
+            <div class="row g-3 room-form-stack">
+              <div class="col-12"><label class="form-label">Name <span class="text-danger">*</span></label><input name="name" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Price <span class="text-danger">*</span></label><input name="price" type="number" step="0.01" min="0" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Stock Tracked</label><select name="stock_tracked" class="form-select"><option value="1">Yes</option><option value="0">No</option></select></div>
+              <div class="col-12"><label class="form-label">Status</label><select name="active" class="form-select"><option value="1">Active</option><option value="0">Inactive</option></select></div>
+            </div>
+            <div class="alert d-none" id="extraStatus"></div>
+            <div class="room-inline-actions"><button class="btn btn-primary" type="submit" id="extraSubmitButton">Save Extra</button><button class="btn btn-outline-secondary" type="reset">Clear</button></div>
+          </form>
+          <div id="extrasList" class="table-responsive surface"></div>
+        </div>
+      </section>
+      <section class="d-none" data-panel="stock">
+        <div class="page-header"><div><h2>Stock</h2></div><button class="btn btn-primary" id="newStockButton">Record Movement</button></div>
+        <div class="booking-tabs mb-3" role="tablist" aria-label="Stock views">
+          <button class="booking-tab active" type="button" data-stock-tab="movements">Movements</button>
+          <button class="booking-tab" type="button" data-stock-tab="inventory">Inventory</button>
+        </div>
+        <div data-stock-panel="movements">
+          <form id="stockMovementFilters" class="surface booking-history-filters mb-3">
+            <div><label class="form-label">Search</label><input name="search" class="form-control" placeholder="Item, note, user"></div>
+            <div><label class="form-label">Extra</label><select name="extra_id" class="form-select" id="stockFilterExtra"><option value="">All extras</option></select></div>
+            <div><label class="form-label">Type</label><select name="movement_type" class="form-select"><option value="">All types</option><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div>
+            <div><label class="form-label">From</label><input name="from" type="date" class="form-control"></div>
+            <div><label class="form-label">To</label><input name="to" type="date" class="form-control"></div>
+            <div class="booking-history-filter-actions"><button class="btn btn-primary">Apply</button><button class="btn btn-outline-secondary" type="button" id="resetStockMovementFilters">Reset</button></div>
+          </form>
+          <div id="stockMovementList" class="table-responsive surface"></div>
+          <div id="stockMovementPager" class="booking-history-pager mt-3"></div>
+        </div>
+        <div class="d-none" data-stock-panel="inventory"><div id="stockInventoryList" class="table-responsive surface"></div></div>
+      </section>
       <section class="d-none" data-panel="payments"><div class="page-header"><div><h2>Payments</h2><p>Received payments and void status.</p></div></div><div id="paymentsList" class="table-responsive surface"></div></section>
       <section class="d-none" data-panel="expenses"><div class="page-header"><div><h2>Expenses</h2><p>Operating expenses and reporting categories.</p></div><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>
       <section class="d-none" data-panel="reports"><div class="page-header"><div><h2>Reports</h2><p>Revenue, expenses, net income, and payment methods.</p></div></div><div id="reportsPanel" class="surface"></div></section>
-      <section class="d-none" data-panel="users"><div class="page-header"><div><h2>Users</h2><p>Staff access and role permissions.</p></div><button class="btn btn-primary" id="newUserButton">New User</button></div><div id="usersList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="audit"><div class="page-header"><div><h2>Audit Logs</h2><p>Operational and financial change history.</p></div></div><div id="auditList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="users">
+        <div class="page-header"><div><h2>Users</h2><p>Staff access and role permissions.</p></div></div>
+        <div class="entity-layout">
+          <form id="userForm" class="surface room-inline-form" novalidate>
+            <input type="hidden" name="id" value="">
+            <div class="form-panel-heading"><h5 id="userFormTitle">New User</h5><span>Create staff access with the least role needed for the job.</span></div>
+            <div class="row g-3 room-form-stack">
+              <div class="col-12"><label class="form-label">Name <span class="text-danger">*</span></label><input name="name" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Email <span class="text-danger">*</span></label><input name="email" type="email" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Role</label><select name="role" class="form-select"><option value="reception">Reception</option><option value="manager">Manager</option><option value="administrator">Administrator</option><option value="auditor">Auditor</option></select></div>
+              <div class="col-12"><label class="form-label">Status</label><select name="active" class="form-select"><option value="1">Active</option><option value="0">Inactive</option></select></div>
+              <div class="col-12"><label class="form-label">Password <span class="text-danger" id="userPasswordRequired">*</span></label><input name="password" type="password" minlength="8" class="form-control" required></div>
+            </div>
+            <div class="alert d-none" id="userStatus"></div>
+            <div class="room-inline-actions"><button class="btn btn-primary" type="submit" id="userSubmitButton">Save User</button><button class="btn btn-outline-secondary" type="reset">Clear</button></div>
+          </form>
+          <div id="usersList" class="table-responsive surface"></div>
+        </div>
+      </section>
+      <section class="d-none" data-panel="audit">
+        <div class="page-header"><div><h2>Audit Logs</h2><p>Operational and financial change history.</p></div></div>
+        <form id="auditFilters" class="surface booking-history-filters mb-3">
+          <div><label class="form-label">Search</label><input name="search" class="form-control" placeholder="Action, entity, user"></div>
+          <div><label class="form-label">Entity</label><input name="entity" class="form-control" placeholder="booking, user, room"></div>
+          <div><label class="form-label">Action</label><input name="action" class="form-control" placeholder="created, updated"></div>
+          <div><label class="form-label">From</label><input name="from" type="date" class="form-control"></div>
+          <div><label class="form-label">To</label><input name="to" type="date" class="form-control"></div>
+          <div class="booking-history-filter-actions"><button class="btn btn-primary">Apply</button><button class="btn btn-outline-secondary" type="button" id="resetAuditFilters">Reset</button></div>
+        </form>
+        <div id="auditList" class="table-responsive surface"></div>
+        <div id="auditPager" class="booking-history-pager mt-3"></div>
+      </section>
     </main>
   </div>
 </div>

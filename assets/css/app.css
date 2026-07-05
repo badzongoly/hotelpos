@@ -253,3 +253,19 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
   .room-inline-actions { flex-direction: column; }
 }
 
+.entity-layout { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 16px; align-items: start; }
+#extraForm, #userForm { position: sticky; top: 84px; }
+#extraForm .alert, #userForm .alert { margin-bottom: 0; }
+#extraForm.was-validated .form-control:invalid, #userForm.was-validated .form-control:invalid { border-color: #dc3545; }
+#extraForm.was-validated .form-control:valid, #userForm.was-validated .form-control:valid { border-color: #198754; }
+#stockMovementFilters, #auditFilters { grid-template-columns: minmax(190px, 1.2fr) repeat(4, minmax(130px, .8fr)) auto; }
+#stockMovementList .app-table td:nth-child(5), #auditList .app-table td:nth-child(3) { min-width: 180px; overflow-wrap: anywhere; }
+.app-table .btn + .btn { margin-left: 4px; }
+@media (max-width: 1199.98px) {
+  .entity-layout { grid-template-columns: 1fr; }
+  #extraForm, #userForm { position: static; }
+  #stockMovementFilters, #auditFilters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 575.98px) {
+  #stockMovementFilters, #auditFilters { grid-template-columns: 1fr; }
+}

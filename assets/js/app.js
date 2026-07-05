@@ -36,7 +36,7 @@
   function tableCell(column, value) {
     return esc(isDateColumn(column) ? formatDateTime(value) : value);
   }
-  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null };
+  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null };
   let modal;
 
   // Initialize Bootstrap widgets, bind event handlers, restore the session,
@@ -65,10 +65,17 @@
     $('[data-refresh="dashboard"]')?.addEventListener('click', () => loadDashboard());
     $('#newRoomForm')?.addEventListener('submit', createRoomInline);
     $('#newRoomForm')?.addEventListener('reset', () => showNewRoomStatus('', 'd-none'));
-    $('#newExtraButton')?.addEventListener('click', extraForm);
+    $('#extraForm')?.addEventListener('submit', saveExtraInline);
+    $('#extraForm')?.addEventListener('reset', resetExtraForm);
     $('#newStockButton')?.addEventListener('click', stockForm);
     $('#newExpenseButton')?.addEventListener('click', expenseForm);
-    $('#newUserButton')?.addEventListener('click', userForm);
+    $('#userForm')?.addEventListener('submit', saveUserInline);
+    $('#userForm')?.addEventListener('reset', resetUserForm);
+    document.querySelectorAll('[data-stock-tab]').forEach(btn => btn.addEventListener('click', () => switchStockTab(btn.dataset.stockTab)));
+    $('#stockMovementFilters')?.addEventListener('submit', e => { e.preventDefault(); state.stockMovementPage = 1; loadStock(); });
+    $('#resetStockMovementFilters')?.addEventListener('click', resetStockMovementFilters);
+    $('#auditFilters')?.addEventListener('submit', e => { e.preventDefault(); state.auditPage = 1; loadAudit(); });
+    $('#resetAuditFilters')?.addEventListener('click', resetAuditFilters);
     document.querySelectorAll('[data-bookings-tab]').forEach(btn => btn.addEventListener('click', () => switchBookingsTab(btn.dataset.bookingsTab)));
     $('#bookingHistoryFilters')?.addEventListener('submit', e => { e.preventDefault(); state.bookingHistoryPage = 1; loadBookingHistory(); });
     $('#resetBookingHistoryFilters')?.addEventListener('click', resetBookingHistoryFilters);
@@ -496,6 +503,18 @@
     state.bookingHistoryPage = 1;
     loadBookingHistory();
   }
+
+  function resetStockMovementFilters() {
+    $('#stockMovementFilters')?.reset();
+    state.stockMovementPage = 1;
+    loadStock();
+  }
+
+  function resetAuditFilters() {
+    $('#auditFilters')?.reset();
+    state.auditPage = 1;
+    loadAudit();
+  }
   function renderBookingRoomPicker() {
     const activeRooms = state.rooms.filter(room => Number(room.active) === 1);
     const availableCount = activeRooms.filter(room => room.status === 'vacant').length;
@@ -599,14 +618,137 @@
     $('#bookingRoomPicker .booking-room-board')?.classList.add('pulse-attention');
     window.setTimeout(() => $('#bookingRoomPicker .booking-room-board')?.classList.remove('pulse-attention'), 900);
   }
-  async function loadExtras() { const d = await api.get('/extras'); state.extras = d.extras || []; $('#extrasList').innerHTML = table(state.extras, ['id', 'name', 'price', 'stock_qty', 'stock_tracked', 'active']); }
-  async function loadStock() { const d = await api.get('/stock'); $('#stockList').innerHTML = '<h5>Inventory</h5>' + table(d.extras || [], ['id', 'name', 'stock_qty', 'stock_tracked']) + '<h5 class="mt-4">Movements</h5>' + table(d.movements || [], ['created_at', 'extra_name', 'movement_type', 'qty', 'note', 'user_name']); }
+  async function loadExtras() {
+    const d = await api.get('/extras');
+    state.extras = d.extras || [];
+    renderExtras();
+  }
+
+  async function loadStock() {
+    switchStockTab(state.stockTab || 'movements', false);
+    const d = await api.get(`/stock?${stockMovementQuery()}`);
+    state.extras = d.extras || [];
+    state.stockMovements = d.movements || [];
+    state.stockMovementPagination = d.pagination || { page: 1, pages: 1, total: 0 };
+    renderStockFilterOptions();
+    renderStockInventory();
+    renderStockMovements();
+  }
+
   async function loadPayments() { const d = await api.get('/payments'); $('#paymentsList').innerHTML = table(d.payments || [], ['created_at', 'guest_name', 'room_name', 'method', 'amount', 'note', 'voided_at']); }
   async function loadExpenses() { const d = await api.get('/expenses'); state.categories = d.categories || []; $('#expensesList').innerHTML = table(d.expenses || [], ['expense_date', 'category_name', 'method', 'amount', 'vendor', 'description', 'voided_at']); }
   async function loadReports() { const d = await api.get('/reports/summary'); $('#reportsPanel').innerHTML = `<div class="row g-3"><div class="col"><div class="metric"><div>Revenue</div><div class="value">${money(d.revenue)}</div></div></div><div class="col"><div class="metric"><div>Expenses</div><div class="value">${money(d.expenses)}</div></div></div><div class="col"><div class="metric"><div>Net Income</div><div class="value">${money(d.net_income)}</div></div></div></div><h5 class="mt-4">Payments by Method</h5>${table(d.payments_by_method || [], ['method', 'total'])}`; }
-  async function loadUsers() { const d = await api.get('/users'); $('#usersList').innerHTML = table(d.users || [], ['id', 'name', 'email', 'role', 'active', 'created_at']); }
-  async function loadAudit() { const d = await api.get('/audit'); $('#auditList').innerHTML = table(d.logs || [], ['created_at', 'user_name', 'action', 'entity', 'entity_id']); }
 
+  async function loadUsers() {
+    const d = await api.get('/users');
+    state.users = d.users || [];
+    renderUsers();
+  }
+
+  async function loadAudit() {
+    const d = await api.get(`/audit?${auditQuery()}`);
+    state.auditLogs = d.logs || [];
+    state.auditPagination = d.pagination || { page: 1, pages: 1, total: 0 };
+    renderAudit();
+  }
+
+  function renderExtras() {
+    if (!state.extras.length) {
+      $('#extrasList').innerHTML = '<div class="empty-state">No extras found. Add the first sale item from the form.</div>';
+      return;
+    }
+    $('#extrasList').innerHTML = `<table class="table table-sm table-striped app-table"><thead><tr><th>Name</th><th>Price</th><th>Stock</th><th class="text-end">Actions</th></tr></thead><tbody>${state.extras.map(extra => `<tr><td>${esc(extra.name)}</td><td>${money(extra.price)}</td><td>${Number(extra.stock_qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-extra-view="${extra.id}">View</button> <button class="btn btn-sm btn-outline-primary" data-extra-edit="${extra.id}">Edit</button></td></tr>`).join('')}</tbody></table>`;
+    document.querySelectorAll('[data-extra-view]').forEach(btn => btn.addEventListener('click', () => viewExtra(btn.dataset.extraView)));
+    document.querySelectorAll('[data-extra-edit]').forEach(btn => btn.addEventListener('click', () => editExtraInline(btn.dataset.extraEdit)));
+  }
+
+  function switchStockTab(tab, shouldLoad = true) {
+    state.stockTab = tab === 'inventory' ? 'inventory' : 'movements';
+    document.querySelectorAll('[data-stock-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.stockTab === state.stockTab));
+    document.querySelectorAll('[data-stock-panel]').forEach(panel => panel.classList.toggle('d-none', panel.dataset.stockPanel !== state.stockTab));
+    if (shouldLoad) loadStock();
+  }
+
+  function stockMovementQuery() {
+    const form = $('#stockMovementFilters');
+    const data = form ? Object.fromEntries(new FormData(form).entries()) : {};
+    const params = new URLSearchParams();
+    params.set('page', String(state.stockMovementPage || 1));
+    params.set('per_page', '10');
+    ['search', 'extra_id', 'movement_type', 'from', 'to'].forEach(key => { if (data[key]) params.set(key, data[key]); });
+    return params.toString();
+  }
+
+  function renderStockFilterOptions() {
+    const select = $('#stockFilterExtra');
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">All extras</option>' + state.extras.map(extra => `<option value="${extra.id}">${esc(extra.name)}</option>`).join('');
+    select.value = selected;
+  }
+
+  function renderStockInventory() {
+    const rows = state.extras || [];
+    $('#stockInventoryList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Name</th><th>Stock Qty</th></tr></thead><tbody>${rows.map(extra => `<tr><td>${esc(extra.name)}</td><td>${Number(extra.stock_qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No active inventory items found.</div>';
+  }
+
+  function renderStockMovements() {
+    const rows = state.stockMovements || [];
+    const pagination = state.stockMovementPagination || { page: 1, pages: 1, total: 0 };
+    $('#stockMovementList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Extra</th><th>Type</th><th>Qty</th><th>Note</th><th>User</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.extra_name)}</td><td>${stockMovementBadge(row.movement_type)}</td><td>${Number(row.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td><td>${esc(row.note || '')}</td><td>${esc(row.user_name || '')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No stock movements match these filters.</div>';
+    renderPager('#stockMovementPager', pagination, 'movement-page');
+    document.querySelectorAll('[data-movement-page]').forEach(btn => btn.addEventListener('click', () => {
+      const page = state.stockMovementPagination?.page || 1;
+      state.stockMovementPage = btn.dataset.movementPage === 'next' ? page + 1 : page - 1;
+      loadStock();
+    }));
+  }
+
+  function renderUsers() {
+    if (!state.users.length) {
+      $('#usersList').innerHTML = '<div class="empty-state">No users found.</div>';
+      return;
+    }
+    $('#usersList').innerHTML = `<table class="table table-sm table-striped app-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>${state.users.map(user => `<tr><td>${esc(user.name)}</td><td>${esc(user.email)}</td><td class="text-capitalize">${esc(user.role)}</td><td>${statusBadge(Number(user.active) === 1 ? 'Active' : 'Inactive', Number(user.active) === 1 ? 'success' : 'secondary')}</td><td class="text-end"><button class="btn btn-sm btn-outline-primary" data-user-edit="${user.id}">Edit</button></td></tr>`).join('')}</tbody></table>`;
+    document.querySelectorAll('[data-user-edit]').forEach(btn => btn.addEventListener('click', () => editUserInline(btn.dataset.userEdit)));
+  }
+
+  function auditQuery() {
+    const form = $('#auditFilters');
+    const data = form ? Object.fromEntries(new FormData(form).entries()) : {};
+    const params = new URLSearchParams();
+    params.set('page', String(state.auditPage || 1));
+    params.set('per_page', '10');
+    ['search', 'entity', 'action', 'from', 'to'].forEach(key => { if (data[key]) params.set(key, data[key]); });
+    return params.toString();
+  }
+
+  function renderAudit() {
+    const rows = state.auditLogs || [];
+    const pagination = state.auditPagination || { page: 1, pages: 1, total: 0 };
+    $('#auditList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>User</th><th>Action</th><th>Entity</th><th>Entity ID</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.user_name || 'System')}</td><td>${esc(row.action)}</td><td>${esc(row.entity)}</td><td>${esc(row.entity_id || '')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No audit logs match these filters.</div>';
+    renderPager('#auditPager', pagination, 'audit-page');
+    document.querySelectorAll('[data-audit-page]').forEach(btn => btn.addEventListener('click', () => {
+      const page = state.auditPagination?.page || 1;
+      state.auditPage = btn.dataset.auditPage === 'next' ? page + 1 : page - 1;
+      loadAudit();
+    }));
+  }
+
+  function renderPager(target, pagination, dataName) {
+    const el = $(target);
+    if (!el) return;
+    el.innerHTML = `<div class="d-flex align-items-center justify-content-between gap-3"><div class="text-secondary">${pagination.total || 0} record${Number(pagination.total || 0) === 1 ? '' : 's'} &middot; Page ${pagination.page || 1} of ${pagination.pages || 1}</div><div class="btn-group"><button class="btn btn-outline-secondary btn-sm" data-${dataName}="prev" ${(pagination.page || 1) <= 1 ? 'disabled' : ''}>Previous</button><button class="btn btn-outline-secondary btn-sm" data-${dataName}="next" ${(pagination.page || 1) >= (pagination.pages || 1) ? 'disabled' : ''}>Next</button></div></div>`;
+  }
+
+  function statusBadge(label, tone) {
+    return `<span class="badge text-bg-${tone}">${esc(label)}</span>`;
+  }
+
+  function stockMovementBadge(type) {
+    const tone = ({ in: 'success', return: 'success', out: 'primary', adjustment: 'warning', waste: 'danger' })[type] || 'secondary';
+    return statusBadge(type || 'unknown', tone);
+  }
   // Generic table renderer for simple admin/reference lists.
   function table(rows, cols) {
     if (!rows.length) return '<div class="empty-state">No records found.</div>';
@@ -708,10 +850,183 @@
     });
     $('#modalBody input[name="guest_name"]')?.focus();
   }
-  function extraForm() { openForm('New Extra', `<form class="row g-3"><div class="col-md-6"><label class="form-label">Name</label><input name="name" class="form-control" required></div><div class="col-md-3"><label class="form-label">Price</label><input name="price" type="number" step="0.01" class="form-control" required></div><div class="col-md-3"><label class="form-label">Stock Tracked</label><select name="stock_tracked" class="form-select"><option value="1">Yes</option><option value="0">No</option></select></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/extras/save', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadExtras(); }); }
+  function extraById(id) {
+    return state.extras.find(extra => Number(extra.id) === Number(id));
+  }
+
+  function showExtraStatus(message, className = 'd-none') {
+    const status = $('#extraStatus');
+    if (!status) return;
+    status.className = `alert ${className}`;
+    status.textContent = message;
+  }
+
+  function resetExtraForm(event) {
+    const form = event.currentTarget;
+    window.setTimeout(() => {
+      form.querySelector('[name="id"]').value = '';
+      $('#extraFormTitle').textContent = 'New Extra';
+      $('#extraSubmitButton').textContent = 'Save Extra';
+      form.querySelector('[name="active"]').value = '1';
+      form.querySelector('[name="stock_tracked"]').value = '1';
+      form.classList.remove('was-validated');
+      showExtraStatus('', 'd-none');
+    });
+  }
+
+  function editExtraInline(id) {
+    const extra = extraById(id);
+    const form = $('#extraForm');
+    if (!extra || !form) return;
+    form.querySelector('[name="id"]').value = extra.id;
+    form.querySelector('[name="name"]').value = extra.name || '';
+    form.querySelector('[name="price"]').value = Number(extra.price || 0).toFixed(2);
+    form.querySelector('[name="stock_tracked"]').value = String(Number(extra.stock_tracked ?? 1));
+    form.querySelector('[name="active"]').value = String(Number(extra.active ?? 1));
+    $('#extraFormTitle').textContent = 'Edit Extra';
+    $('#extraSubmitButton').textContent = 'Update Extra';
+    showExtraStatus('Editing extra. Save changes or clear to start a new one.', 'alert-info');
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.querySelector('[name="name"]').focus();
+  }
+
+  function viewExtra(id) {
+    const extra = extraById(id);
+    if (!extra) return;
+    openForm('Extra Details', `<form class="room-profile">
+      <div class="room-profile-hero"><div><div class="room-profile-label">Extra</div><h3>${esc(extra.name)}</h3></div>${statusBadge(Number(extra.active) === 1 ? 'Active' : 'Inactive', Number(extra.active) === 1 ? 'success' : 'secondary')}</div>
+      <div class="room-profile-rate"><span>Current price</span><strong>${money(extra.price)}</strong></div>
+      <div class="room-detail-grid">
+        <div class="room-detail-tile"><span>Stock quantity</span><strong>${Number(extra.stock_qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
+        <div class="room-detail-tile"><span>Stock tracked</span><strong>${Number(extra.stock_tracked) === 1 ? 'Yes' : 'No'}</strong></div>
+        <div class="room-detail-tile"><span>Created</span><strong>${formatDateTime(extra.created_at, 'Not recorded')}</strong></div>
+        <div class="room-detail-tile"><span>Last updated</span><strong>${formatDateTime(extra.updated_at, 'Not updated yet')}</strong></div>
+      </div>
+      <div class="room-profile-footer"><button class="btn btn-primary" type="button" data-extra-edit-from-view="${extra.id}">Edit extra</button><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button></div>
+    </form>`, e => e.preventDefault());
+    $('[data-extra-edit-from-view]')?.addEventListener('click', () => { modal.hide(); editExtraInline(extra.id); });
+  }
+
+  async function saveExtraInline(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = $('#extraSubmitButton');
+    const data = Object.fromEntries(new FormData(form).entries());
+    const errors = [];
+    if (!String(data.name || '').trim()) errors.push('Extra name is required.');
+    if (String(data.price || '').trim() === '' || Number(data.price) < 0) errors.push('Enter a valid non-negative price.');
+    form.classList.add('was-validated');
+    if (errors.length) {
+      showExtraStatus(errors.join(' '), 'alert-danger');
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = data.id ? 'Updating...' : 'Saving...';
+    try {
+      await api.post('/extras/save', data);
+      form.querySelector('[name="id"]').value = '';
+      form.querySelector('[name="name"]').value = '';
+      form.querySelector('[name="price"]').value = '';
+      form.querySelector('[name="stock_tracked"]').value = '1';
+      form.querySelector('[name="active"]').value = '1';
+      $('#extraFormTitle').textContent = 'New Extra';
+      $('#extraSubmitButton').textContent = 'Save Extra';
+      form.classList.remove('was-validated');
+      showExtraStatus(data.id ? 'Extra updated successfully.' : 'Extra saved successfully.', 'alert-success');
+      await loadExtras();
+    } catch (err) {
+      showExtraStatus(err.message, 'alert-danger');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = $('#extraFormTitle').textContent === 'Edit Extra' ? 'Update Extra' : 'Save Extra';
+    }
+  }
   async function stockForm() { await loadExtras(); const options = state.extras.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(''); openForm('Record Stock Movement', `<form class="row g-3"><div class="col-md-6"><label class="form-label">Extra</label><select name="extra_id" class="form-select">${options}</select></div><div class="col-md-3"><label class="form-label">Type</label><select name="movement_type" class="form-select"><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div><div class="col-md-3"><label class="form-label">Qty</label><input name="qty" type="number" step="0.01" class="form-control" required></div><div class="col-12"><label class="form-label">Note</label><input name="note" class="form-control"></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/stock/movement', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadStock(); }); }
   async function expenseForm() { await loadExpenses(); const options = state.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''); openForm('New Expense', `<form class="row g-3"><div class="col-md-4"><label class="form-label">Date</label><input name="expense_date" type="date" class="form-control" required></div><div class="col-md-4"><label class="form-label">Category</label><select name="category_id" class="form-select">${options}</select></div><div class="col-md-4"><label class="form-label">Method</label><select name="method" class="form-select"><option value="cash">Cash</option><option value="momo">MoMo</option><option value="card">Card</option><option value="bank">Bank</option><option value="other">Other</option></select></div><div class="col-md-4"><label class="form-label">Amount</label><input name="amount" type="number" step="0.01" class="form-control" required></div><div class="col-md-4"><label class="form-label">Vendor</label><input name="vendor" class="form-control"></div><div class="col-md-4"><label class="form-label">Reference</label><input name="reference_no" class="form-control"></div><div class="col-12"><label class="form-label">Description</label><input name="description" class="form-control"></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/expenses/save', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadExpenses(); }); }
-  async function userForm() { openForm('New User', `<form class="row g-3"><div class="col-md-6"><label class="form-label">Name</label><input name="name" class="form-control" required></div><div class="col-md-6"><label class="form-label">Email</label><input name="email" type="email" class="form-control" required></div><div class="col-md-6"><label class="form-label">Role</label><select name="role" class="form-select"><option value="reception">Reception</option><option value="manager">Manager</option><option value="administrator">Administrator</option><option value="auditor">Auditor</option></select></div><div class="col-md-6"><label class="form-label">Password</label><input name="password" type="password" class="form-control" required></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/users/save', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadUsers(); }); }
+  function userById(id) {
+    return state.users.find(user => Number(user.id) === Number(id));
+  }
+
+  function showUserStatus(message, className = 'd-none') {
+    const status = $('#userStatus');
+    if (!status) return;
+    status.className = `alert ${className}`;
+    status.textContent = message;
+  }
+
+  function resetUserForm(event) {
+    const form = event.currentTarget;
+    window.setTimeout(() => {
+      form.querySelector('[name="id"]').value = '';
+      form.querySelector('[name="password"]').required = true;
+      $('#userPasswordRequired').classList.remove('d-none');
+      $('#userFormTitle').textContent = 'New User';
+      $('#userSubmitButton').textContent = 'Save User';
+      form.querySelector('[name="role"]').value = 'reception';
+      form.querySelector('[name="active"]').value = '1';
+      form.classList.remove('was-validated');
+      showUserStatus('', 'd-none');
+    });
+  }
+
+  function editUserInline(id) {
+    const user = userById(id);
+    const form = $('#userForm');
+    if (!user || !form) return;
+    form.querySelector('[name="id"]').value = user.id;
+    form.querySelector('[name="name"]').value = user.name || '';
+    form.querySelector('[name="email"]').value = user.email || '';
+    form.querySelector('[name="role"]').value = user.role || 'reception';
+    form.querySelector('[name="active"]').value = String(Number(user.active ?? 1));
+    form.querySelector('[name="password"]').value = '';
+    form.querySelector('[name="password"]').required = false;
+    $('#userPasswordRequired').classList.add('d-none');
+    $('#userFormTitle').textContent = 'Edit User';
+    $('#userSubmitButton').textContent = 'Update User';
+    showUserStatus('Editing user. Leave password blank to keep the current password.', 'alert-info');
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.querySelector('[name="name"]').focus();
+  }
+
+  async function saveUserInline(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = $('#userSubmitButton');
+    const data = Object.fromEntries(new FormData(form).entries());
+    const errors = [];
+    if (!String(data.name || '').trim()) errors.push('Name is required.');
+    if (!String(data.email || '').trim()) errors.push('Email is required.');
+    if (!data.id && !String(data.password || '').trim()) errors.push('Password is required for new users.');
+    if (data.password && String(data.password).length < 8) errors.push('Password must be at least 8 characters.');
+    form.classList.add('was-validated');
+    if (errors.length) {
+      showUserStatus(errors.join(' '), 'alert-danger');
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = data.id ? 'Updating...' : 'Saving...';
+    try {
+      await api.post('/users/save', data);
+      form.querySelector('[name="id"]').value = '';
+      form.querySelector('[name="name"]').value = '';
+      form.querySelector('[name="email"]').value = '';
+      form.querySelector('[name="role"]').value = 'reception';
+      form.querySelector('[name="active"]').value = '1';
+      form.querySelector('[name="password"]').value = '';
+      form.querySelector('[name="password"]').required = true;
+      $('#userPasswordRequired').classList.remove('d-none');
+      $('#userFormTitle').textContent = 'New User';
+      $('#userSubmitButton').textContent = 'Save User';
+      form.classList.remove('was-validated');
+      showUserStatus(data.id ? 'User updated successfully.' : 'User saved successfully.', 'alert-success');
+      await loadUsers();
+    } catch (err) {
+      showUserStatus(err.message, 'alert-danger');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = $('#userFormTitle').textContent === 'Edit User' ? 'Update User' : 'Save User';
+    }
+  }
   async function paymentForm(bookingId, returnTo = null) {
     const booking = state.bookings.find(item => Number(item.id) === Number(bookingId));
     const balance = Number(booking?.totals?.balance || 0);
