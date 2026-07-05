@@ -174,8 +174,7 @@ if ($base === '/' || $base === '\\') {
       <section class="d-none" data-panel="expenses"><div class="page-header"><div><h2>Expenses</h2><p>Operating expenses and reporting categories.</p></div><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>
       <section class="d-none" data-panel="reports">
         <div class="page-header"><div><h2>Reports</h2><p>Management analytics for revenue, cashflow, occupancy, inventory, staff activity, and audit issues.</p></div><div class="d-flex gap-2"><button class="btn btn-outline-secondary" type="button" id="printReportsButton">Print</button><button class="btn btn-primary" type="button" id="exportReportsButton">Export CSV</button></div></div>
-        <form id="reportFilters" class="surface report-filters mb-3">
-          <div><label class="form-label">Range</label><select name="preset" class="form-select"><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="this_week">This week</option><option value="this_month" selected>This month</option><option value="last_month">Last month</option><option value="custom">Custom</option></select></div>
+        <form id="reportFilters" class="surface report-filters mb-3" data-default-range="month-to-date">
           <div><label class="form-label">Start</label><input name="start" type="date" class="form-control"></div>
           <div><label class="form-label">End</label><input name="end" type="date" class="form-control"></div>
           <div><label class="form-label">Room</label><select name="room_id" class="form-select" id="reportRoomFilter"><option value="">All rooms</option></select></div>

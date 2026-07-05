@@ -271,7 +271,6 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
 }
 .report-filters { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)) auto; gap: 12px; align-items: end; }
 .report-filter-actions { display: flex; gap: 8px; }
-.report-range-note { color: var(--muted); margin-bottom: 12px; }
 .report-kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .reports-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .report-chart { min-height: 340px; }
@@ -295,3 +294,9 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
 .report-table-pager { align-items: center; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; }
 @media (max-width: 575.98px) { .report-tabs { display: grid; grid-template-columns: 1fr; } .report-table-pager { align-items: stretch; flex-direction: column; } .report-table-pager .btn-group { display: grid; grid-template-columns: 1fr 1fr; } }
 @media print { .report-tabs, .report-table-pager { display: none !important; } [data-report-panel].d-none { display: block !important; } }
+
+.guest-insight-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 767.98px) { .guest-insight-grid { grid-template-columns: 1fr; } }
+
+.metric .value { white-space: nowrap; }
+@media (max-width: 420px) { .metric .value { white-space: normal; } }
