@@ -12,6 +12,30 @@
   const money = (n) => `GHS ${Number(n || 0).toFixed(2)}`;
   const extrasSoldAmount = (summary) => money(summary?.total_amount);
   const esc = (v) => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const pad2 = (n) => String(n).padStart(2, '0');
+  const isDateColumn = (column) => /(^|_)(date|at)$/.test(column);
+
+  // Display all app dates as dd/mm/yy hh:mm while keeping API/database values unchanged.
+  function formatDateTime(value, fallback = '') {
+    if (value === null || value === undefined || value === '') return fallback;
+    const raw = String(value).trim();
+    const sqlMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::\d{2})?)?/);
+    if (sqlMatch) {
+      const [, year, month, day, hour = '00', minute = '00'] = sqlMatch;
+      return `${day}/${month}/${year.slice(-2)} ${hour}:${minute}`;
+    }
+
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return `${pad2(parsed.getDate())}/${pad2(parsed.getMonth() + 1)}/${String(parsed.getFullYear()).slice(-2)} ${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
+    }
+
+    return raw;
+  }
+
+  function tableCell(column, value) {
+    return esc(isDateColumn(column) ? formatDateTime(value) : value);
+  }
   let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null };
   let modal;
 
@@ -46,8 +70,8 @@
     $('#newUserButton')?.addEventListener('click', userForm);
     document.querySelectorAll('[data-bookings-tab]').forEach(btn => btn.addEventListener('click', () => switchBookingsTab(btn.dataset.bookingsTab)));
     $('#bookingHistoryFilters')?.addEventListener('submit', e => { e.preventDefault(); state.bookingHistoryPage = 1; loadBookingHistory(); });
-    $('#resetBookingHistoryFilters')?.addEventListener('click', resetBookingHistoryFilters);  }
-
+    $('#resetBookingHistoryFilters')?.addEventListener('click', resetBookingHistoryFilters);
+  }
   // Ask the server whether this browser already has a valid session.
   async function hydrateSession() {
     try {
@@ -168,7 +192,7 @@
     const canvas = $('#revenueChart');
     if (!canvas || !window.Chart) return;
 
-    const labels = rows.map(r => r.day);
+    const labels = rows.map(r => formatDateTime(r.day));
     const values = rows.map(r => Number(r.total || 0));
 
     if (revenueChart) revenueChart.destroy();
@@ -298,8 +322,8 @@
         <div class="room-detail-tile"><span>Availability</span><strong>${esc(room.status)}</strong></div>
         <div class="room-detail-tile"><span>Active</span><strong>${isActive ? 'Yes' : 'No'}</strong></div>
         <div class="room-detail-tile"><span>Counts in occupancy</span><strong>${counted ? 'Yes' : 'No'}</strong></div>
-        <div class="room-detail-tile room-detail-wide"><span>Created</span><strong>${esc(room.created_at || 'Not recorded')}</strong></div>
-        <div class="room-detail-tile room-detail-wide"><span>Last updated</span><strong>${esc(room.updated_at || 'Not updated yet')}</strong></div>
+        <div class="room-detail-tile room-detail-wide"><span>Created</span><strong>${formatDateTime(room.created_at, 'Not recorded')}</strong></div>
+        <div class="room-detail-tile room-detail-wide"><span>Last updated</span><strong>${formatDateTime(room.updated_at, 'Not updated yet')}</strong></div>
       </div>
       <div class="room-profile-footer">
         ${canEdit ? `<button class="btn btn-primary" type="button" data-room-edit-from-view="${room.id}">Edit room</button>` : ''}
@@ -333,7 +357,7 @@
       $('#bookingsList').innerHTML = '<div class="text-secondary py-3">No current stays. Choose a vacant room above to check in a guest.</div>';
       return;
     }
-    $('#bookingsList').innerHTML = `<table class="table table-sm"><thead><tr><th>Guest</th><th>Room</th><th>Check-in</th><th>Nights</th><th>Total</th><th>Balance</th><th></th></tr></thead><tbody>${state.bookings.map(b => `<tr><td>${esc(b.guest_name)}</td><td>${esc(b.room_name)}</td><td>${esc(b.checkin_at || '')}</td><td>${b.totals?.nights ?? ''}</td><td>${money(b.totals?.grand_total)}</td><td>${money(b.totals?.balance)}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-booking-view="${b.id}">View</button> <button class="btn btn-sm btn-outline-primary" data-pay="${b.id}">Pay</button> <button class="btn btn-sm btn-danger" data-checkout="${b.id}">Checkout</button> <button class="btn btn-sm btn-outline-secondary" data-extra="${b.id}">Extra</button></td></tr>`).join('')}</tbody></table>`;
+    $('#bookingsList').innerHTML = `<table class="table table-sm"><thead><tr><th>Guest</th><th>Room</th><th>Check-in</th><th>Nights</th><th>Total</th><th>Balance</th><th></th></tr></thead><tbody>${state.bookings.map(b => `<tr><td>${esc(b.guest_name)}</td><td>${esc(b.room_name)}</td><td>${formatDateTime(b.checkin_at)}</td><td>${b.totals?.nights ?? ''}</td><td>${money(b.totals?.grand_total)}</td><td>${money(b.totals?.balance)}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-booking-view="${b.id}">View</button> <button class="btn btn-sm btn-outline-primary" data-pay="${b.id}">Pay</button> <button class="btn btn-sm btn-danger" data-checkout="${b.id}">Checkout</button> <button class="btn btn-sm btn-outline-secondary" data-extra="${b.id}">Extra</button></td></tr>`).join('')}</tbody></table>`;
     document.querySelectorAll('[data-booking-view]').forEach(b => b.addEventListener('click', () => viewBooking(b.dataset.bookingView)));
     document.querySelectorAll('[data-pay]').forEach(b => b.addEventListener('click', () => paymentForm(b.dataset.pay)));
     document.querySelectorAll('[data-checkout]').forEach(b => b.addEventListener('click', () => checkout(b.dataset.checkout)));
@@ -365,7 +389,7 @@
     if (!rows.length) {
       $('#bookingHistoryList').innerHTML = '<div class="text-secondary py-3">No previous bookings match these filters.</div>';
     } else {
-      $('#bookingHistoryList').innerHTML = `<table class="table table-sm table-striped"><thead><tr><th>Guest</th><th>Room</th><th>Status</th><th>Check-in</th><th>Checkout</th><th>Total</th><th>Paid</th><th></th></tr></thead><tbody>${rows.map(b => `<tr><td>${esc(b.guest_name)}</td><td>${esc(b.room_name)}</td><td><span class="badge ${b.status === 'checked_out' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(b.status)}</span></td><td>${esc(b.checkin_at || '')}</td><td>${esc(b.checkout_at || '')}</td><td>${money(b.totals?.grand_total)}</td><td>${money(b.totals?.paid_total)}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-history-booking-view="${b.id}">View</button></td></tr>`).join('')}</tbody></table>`;
+      $('#bookingHistoryList').innerHTML = `<table class="table table-sm table-striped"><thead><tr><th>Guest</th><th>Room</th><th>Status</th><th>Check-in</th><th>Checkout</th><th>Total</th><th>Paid</th><th></th></tr></thead><tbody>${rows.map(b => `<tr><td>${esc(b.guest_name)}</td><td>${esc(b.room_name)}</td><td><span class="badge ${b.status === 'checked_out' ? 'text-bg-success' : 'text-bg-secondary'}">${esc(b.status)}</span></td><td>${formatDateTime(b.checkin_at)}</td><td>${formatDateTime(b.checkout_at)}</td><td>${money(b.totals?.grand_total)}</td><td>${money(b.totals?.paid_total)}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-history-booking-view="${b.id}">View</button></td></tr>`).join('')}</tbody></table>`;
     }
     $('#bookingHistoryPager').innerHTML = `<div class="d-flex align-items-center justify-content-between gap-3"><div class="text-secondary">${pagination.total || 0} booking${Number(pagination.total || 0) === 1 ? '' : 's'} &middot; Page ${pagination.page || 1} of ${pagination.pages || 1}</div><div class="btn-group"><button class="btn btn-outline-secondary btn-sm" data-history-page="prev" ${(pagination.page || 1) <= 1 ? 'disabled' : ''}>Previous</button><button class="btn btn-outline-secondary btn-sm" data-history-page="next" ${(pagination.page || 1) >= (pagination.pages || 1) ? 'disabled' : ''}>Next</button></div></div>`;
     document.querySelectorAll('[data-history-booking-view]').forEach(btn => btn.addEventListener('click', () => viewHistoryBooking(btn.dataset.historyBookingView)));
@@ -386,8 +410,8 @@
         <span class="badge ${booking.status === 'checked_out' ? 'text-bg-success' : 'text-bg-secondary'} room-status-pill">${esc(booking.status)}</span>
       </div>
       <div class="room-detail-grid">
-        <div class="room-detail-tile"><span>Check-in</span><strong>${esc(booking.checkin_at || '')}</strong></div>
-        <div class="room-detail-tile"><span>Checkout</span><strong>${esc(booking.checkout_at || 'Not checked out')}</strong></div>
+        <div class="room-detail-tile"><span>Check-in</span><strong>${formatDateTime(booking.checkin_at)}</strong></div>
+        <div class="room-detail-tile"><span>Checkout</span><strong>${formatDateTime(booking.checkout_at, 'Not checked out')}</strong></div>
         <div class="room-detail-tile"><span>Total</span><strong>${money(booking.totals?.grand_total)}</strong></div>
         <div class="room-detail-tile"><span>Paid</span><strong>${money(booking.totals?.paid_total)}</strong></div>
         <div class="room-detail-tile"><span>Contact</span><strong>${esc(booking.contact || 'Not recorded')}</strong></div>
@@ -462,7 +486,7 @@
     if (!payments.length) {
       return '<div class="booking-extra-empty">No payments recorded yet.</div>';
     }
-    return `<div class="booking-extra-list">${payments.map(payment => `<div class="booking-extra-row"><div><strong>${esc(payment.method || 'Payment')}</strong><span>${esc(payment.created_at || '')}${payment.note ? ` &middot; ${esc(payment.note)}` : ''}</span></div><strong>${money(payment.amount)}</strong></div>`).join('')}</div>`;
+    return `<div class="booking-extra-list">${payments.map(payment => `<div class="booking-extra-row"><div><strong>${esc(payment.method || 'Payment')}</strong><span>${formatDateTime(payment.created_at)}${payment.note ? ` &middot; ${esc(payment.note)}` : ''}</span></div><strong>${money(payment.amount)}</strong></div>`).join('')}</div>`;
   }
 
   function checkoutSummary(booking) {
@@ -488,7 +512,7 @@
         <span class="badge text-bg-primary room-status-pill">${esc(booking.status)}</span>
       </div>
       <div class="room-detail-grid">
-        <div class="room-detail-tile"><span>Check-in</span><strong>${esc(booking.checkin_at || '')}</strong></div>
+        <div class="room-detail-tile"><span>Check-in</span><strong>${formatDateTime(booking.checkin_at)}</strong></div>
         <div class="room-detail-tile"><span>Nights</span><strong>${esc(booking.totals?.nights ?? '')}</strong></div>
         <div class="room-detail-tile"><span>Total</span><strong>${money(booking.totals?.grand_total)}</strong></div>
         <div class="room-detail-tile"><span>Balance</span><strong>${money(booking.totals?.balance)}</strong></div>
@@ -523,7 +547,7 @@
   // Generic table renderer for simple admin/reference lists.
   function table(rows, cols) {
     if (!rows.length) return '<div class="text-secondary py-3">No records found.</div>';
-    return `<table class="table table-sm table-striped"><thead><tr>${cols.map(c => `<th>${c.replaceAll('_', ' ')}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    return `<table class="table table-sm table-striped"><thead><tr>${cols.map(c => `<th>${c.replaceAll('_', ' ')}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${tableCell(c, r[c])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   }
 
   // Shared modal form wrapper used by the small CRUD/workflow forms below.
@@ -743,7 +767,4 @@
     }
   }
 })();
-
-
-
 
