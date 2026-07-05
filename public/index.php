@@ -48,13 +48,13 @@ if ($base === '/' || $base === '\\') {
     <img src="<?php echo htmlspecialchars($base); ?>/../POS_v1/_review_tivoli/tivoli/img/Tivoli.png" alt="Tivoli" class="sidebar-logo">
     <nav class="nav flex-column nav-pills" id="mainNav">
       <button class="nav-link active" data-view="dashboard">Dashboard</button>
-      <button class="nav-link" data-view="rooms">Rooms</button>
       <button class="nav-link" data-view="bookings">Bookings</button>
-      <button class="nav-link" data-view="extras">Extras</button>
-      <button class="nav-link" data-view="stock">Stock</button>
       <button class="nav-link manager-only" data-view="payments">Payments</button>
-      <button class="nav-link manager-only" data-view="expenses">Expenses</button>
       <button class="nav-link manager-only" data-view="reports">Reports</button>
+      <button class="nav-link" data-view="rooms">Rooms</button>
+      <button class="nav-link" data-view="stock">Stock</button>
+      <button class="nav-link" data-view="extras">Extras</button>
+      <button class="nav-link manager-only" data-view="expenses">Expenses</button>
       <button class="nav-link admin-only" data-view="users">Users</button>
       <button class="nav-link manager-only" data-view="audit">Audit</button>
     </nav>
