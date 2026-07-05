@@ -136,24 +136,39 @@ if ($base === '/' || $base === '\\') {
         </div>
       </section>
       <section class="d-none" data-panel="stock">
-        <div class="page-header"><div><h2>Stock</h2></div><button class="btn btn-primary" id="newStockButton">Record Movement</button></div>
-        <div class="booking-tabs mb-3" role="tablist" aria-label="Stock views">
-          <button class="booking-tab active" type="button" data-stock-tab="movements">Movements</button>
-          <button class="booking-tab" type="button" data-stock-tab="inventory">Inventory</button>
-        </div>
-        <div data-stock-panel="movements">
-          <form id="stockMovementFilters" class="surface booking-history-filters mb-3">
-            <div><label class="form-label">Search</label><input name="search" class="form-control" placeholder="Item, note, user"></div>
-            <div><label class="form-label">Extra</label><select name="extra_id" class="form-select" id="stockFilterExtra"><option value="">All extras</option></select></div>
-            <div><label class="form-label">Type</label><select name="movement_type" class="form-select"><option value="">All types</option><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div>
-            <div><label class="form-label">From</label><input name="from" type="date" class="form-control"></div>
-            <div><label class="form-label">To</label><input name="to" type="date" class="form-control"></div>
-            <div class="booking-history-filter-actions"><button class="btn btn-primary">Apply</button><button class="btn btn-outline-secondary" type="button" id="resetStockMovementFilters">Reset</button></div>
+        <div class="page-header"><div><h2>Stock</h2></div></div>
+        <div class="entity-layout">
+          <form id="stockMovementForm" class="surface room-inline-form" novalidate>
+            <div class="form-panel-heading"><h5>Record Stock Movement</h5><span>Update stock the moment items arrive, leave, return, or are wasted.</span></div>
+            <div class="row g-3 room-form-stack">
+              <div class="col-12"><label class="form-label">Extra <span class="text-danger">*</span></label><select name="extra_id" class="form-select" id="stockMovementExtra" required><option value="">Select extra</option></select></div>
+              <div class="col-12"><label class="form-label">Movement Type</label><select name="movement_type" class="form-select"><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div>
+              <div class="col-12"><label class="form-label">Quantity <span class="text-danger">*</span></label><input name="qty" type="number" step="0.01" min="0.01" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Note</label><input name="note" class="form-control" maxlength="255" placeholder="Optional reason or reference"></div>
+            </div>
+            <div class="alert d-none" id="stockMovementStatus"></div>
+            <div class="room-inline-actions"><button class="btn btn-primary" type="submit" id="stockMovementSubmitButton">Save Movement</button><button class="btn btn-outline-secondary" type="reset">Clear</button></div>
           </form>
-          <div id="stockMovementList" class="table-responsive surface"></div>
-          <div id="stockMovementPager" class="booking-history-pager mt-3"></div>
+          <div>
+            <div class="booking-tabs mb-3" role="tablist" aria-label="Stock views">
+              <button class="booking-tab active" type="button" data-stock-tab="movements">Movements</button>
+              <button class="booking-tab" type="button" data-stock-tab="inventory">Inventory</button>
+            </div>
+            <div data-stock-panel="movements">
+              <form id="stockMovementFilters" class="surface booking-history-filters mb-3">
+                <div><label class="form-label">Search</label><input name="search" class="form-control" placeholder="Item or note"></div>
+                <div><label class="form-label">Extra</label><select name="extra_id" class="form-select" id="stockFilterExtra"><option value="">All extras</option></select></div>
+                <div><label class="form-label">Type</label><select name="movement_type" class="form-select"><option value="">All types</option><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div>
+                <div><label class="form-label">From</label><input name="from" type="date" class="form-control"></div>
+                <div><label class="form-label">To</label><input name="to" type="date" class="form-control"></div>
+                <div class="booking-history-filter-actions"><button class="btn btn-primary">Apply</button><button class="btn btn-outline-secondary" type="button" id="resetStockMovementFilters">Reset</button></div>
+              </form>
+              <div id="stockMovementList" class="table-responsive surface"></div>
+              <div id="stockMovementPager" class="booking-history-pager mt-3"></div>
+            </div>
+            <div class="d-none" data-stock-panel="inventory"><div id="stockInventoryList" class="table-responsive surface"></div></div>
+          </div>
         </div>
-        <div class="d-none" data-stock-panel="inventory"><div id="stockInventoryList" class="table-responsive surface"></div></div>
       </section>
       <section class="d-none" data-panel="payments"><div class="page-header"><div><h2>Payments</h2><p>Received payments and void status.</p></div></div><div id="paymentsList" class="table-responsive surface"></div></section>
       <section class="d-none" data-panel="expenses"><div class="page-header"><div><h2>Expenses</h2><p>Operating expenses and reporting categories.</p></div><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>

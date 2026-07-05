@@ -67,7 +67,8 @@
     $('#newRoomForm')?.addEventListener('reset', () => showNewRoomStatus('', 'd-none'));
     $('#extraForm')?.addEventListener('submit', saveExtraInline);
     $('#extraForm')?.addEventListener('reset', resetExtraForm);
-    $('#newStockButton')?.addEventListener('click', stockForm);
+    $('#stockMovementForm')?.addEventListener('submit', saveStockMovementInline);
+    $('#stockMovementForm')?.addEventListener('reset', resetStockMovementForm);
     $('#newExpenseButton')?.addEventListener('click', expenseForm);
     $('#userForm')?.addEventListener('submit', saveUserInline);
     $('#userForm')?.addEventListener('reset', resetUserForm);
@@ -631,6 +632,7 @@
     state.stockMovements = d.movements || [];
     state.stockMovementPagination = d.pagination || { page: 1, pages: 1, total: 0 };
     renderStockFilterOptions();
+    renderStockMovementFormOptions();
     renderStockInventory();
     renderStockMovements();
   }
@@ -687,6 +689,14 @@
     select.value = selected;
   }
 
+  function renderStockMovementFormOptions() {
+    const select = $('#stockMovementExtra');
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">Select extra</option>' + state.extras.map(extra => `<option value="${extra.id}">${esc(extra.name)} (${Number(extra.stock_qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} in stock)</option>`).join('');
+    select.value = selected;
+  }
+
   function renderStockInventory() {
     const rows = state.extras || [];
     $('#stockInventoryList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Name</th><th>Stock Qty</th></tr></thead><tbody>${rows.map(extra => `<tr><td>${esc(extra.name)}</td><td>${Number(extra.stock_qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No active inventory items found.</div>';
@@ -695,7 +705,7 @@
   function renderStockMovements() {
     const rows = state.stockMovements || [];
     const pagination = state.stockMovementPagination || { page: 1, pages: 1, total: 0 };
-    $('#stockMovementList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Extra</th><th>Type</th><th>Qty</th><th>Note</th><th>User</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.extra_name)}</td><td>${stockMovementBadge(row.movement_type)}</td><td>${Number(row.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td><td>${esc(row.note || '')}</td><td>${esc(row.user_name || '')}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No stock movements match these filters.</div>';
+    $('#stockMovementList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Extra</th><th>Type</th><th>Qty</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.extra_name)}</td><td>${stockMovementBadge(row.movement_type)}</td><td>${Number(row.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No stock movements match these filters.</div>';
     renderPager('#stockMovementPager', pagination, 'movement-page');
     document.querySelectorAll('[data-movement-page]').forEach(btn => btn.addEventListener('click', () => {
       const page = state.stockMovementPagination?.page || 1;
@@ -941,7 +951,54 @@
       submit.textContent = $('#extraFormTitle').textContent === 'Edit Extra' ? 'Update Extra' : 'Save Extra';
     }
   }
-  async function stockForm() { await loadExtras(); const options = state.extras.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join(''); openForm('Record Stock Movement', `<form class="row g-3"><div class="col-md-6"><label class="form-label">Extra</label><select name="extra_id" class="form-select">${options}</select></div><div class="col-md-3"><label class="form-label">Type</label><select name="movement_type" class="form-select"><option value="in">In</option><option value="out">Out</option><option value="adjustment">Adjustment</option><option value="return">Return</option><option value="waste">Waste</option></select></div><div class="col-md-3"><label class="form-label">Qty</label><input name="qty" type="number" step="0.01" class="form-control" required></div><div class="col-12"><label class="form-label">Note</label><input name="note" class="form-control"></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/stock/movement', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadStock(); }); }
+  function showStockMovementStatus(message, className = 'd-none') {
+    const status = $('#stockMovementStatus');
+    if (!status) return;
+    status.className = `alert ${className}`;
+    status.textContent = message;
+  }
+
+  function resetStockMovementForm(event) {
+    const form = event.currentTarget;
+    window.setTimeout(() => {
+      form.classList.remove('was-validated');
+      showStockMovementStatus('', 'd-none');
+    });
+  }
+
+  async function saveStockMovementInline(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = $('#stockMovementSubmitButton');
+    const data = Object.fromEntries(new FormData(form).entries());
+    const errors = [];
+    if (!data.extra_id) errors.push('Choose an extra.');
+    if (!data.movement_type) errors.push('Choose a movement type.');
+    if (String(data.qty || '').trim() === '' || Number(data.qty) <= 0) errors.push('Quantity must be greater than zero.');
+
+    form.classList.add('was-validated');
+    if (errors.length) {
+      showStockMovementStatus(errors.join(' '), 'alert-danger');
+      return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = 'Saving...';
+    try {
+      await api.post('/stock/movement', data);
+      form.querySelector('[name="qty"]').value = '';
+      form.querySelector('[name="note"]').value = '';
+      form.classList.remove('was-validated');
+      showStockMovementStatus('Stock movement recorded successfully.', 'alert-success');
+      state.stockMovementPage = 1;
+      await loadStock();
+    } catch (err) {
+      showStockMovementStatus(err.message, 'alert-danger');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = 'Save Movement';
+    }
+  }
   async function expenseForm() { await loadExpenses(); const options = state.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''); openForm('New Expense', `<form class="row g-3"><div class="col-md-4"><label class="form-label">Date</label><input name="expense_date" type="date" class="form-control" required></div><div class="col-md-4"><label class="form-label">Category</label><select name="category_id" class="form-select">${options}</select></div><div class="col-md-4"><label class="form-label">Method</label><select name="method" class="form-select"><option value="cash">Cash</option><option value="momo">MoMo</option><option value="card">Card</option><option value="bank">Bank</option><option value="other">Other</option></select></div><div class="col-md-4"><label class="form-label">Amount</label><input name="amount" type="number" step="0.01" class="form-control" required></div><div class="col-md-4"><label class="form-label">Vendor</label><input name="vendor" class="form-control"></div><div class="col-md-4"><label class="form-label">Reference</label><input name="reference_no" class="form-control"></div><div class="col-12"><label class="form-label">Description</label><input name="description" class="form-control"></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/expenses/save', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadExpenses(); }); }
   function userById(id) {
     return state.users.find(user => Number(user.id) === Number(id));
