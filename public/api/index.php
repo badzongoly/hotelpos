@@ -90,6 +90,7 @@ $router->add('POST', '/expenses/void', [$make(ExpenseController::class), 'void']
 
 // Manager/auditor endpoints for reporting, users, settings, and audit review.
 $router->add('GET', '/reports/summary', [$make(ReportController::class), 'summary'], false);
+$router->add('GET', '/reports/analytics', [$make(ReportController::class), 'analytics'], false);
 $router->add('GET', '/users', [$make(UserController::class), 'index'], false);
 $router->add('POST', '/users/save', [$make(UserController::class), 'save']);
 $router->add('POST', '/users/disable', [$make(UserController::class), 'disable']);

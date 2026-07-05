@@ -22,5 +22,11 @@ final class ReportController extends Controller
         $end = $query['end'] ?? gmdate('Y-m-d');
         $this->ok('Report summary loaded.', (new ReportService($this->db))->summary($start, $end));
     }
+
+    public function analytics(Request $request): void
+    {
+        $user = $this->role(['administrator', 'manager', 'auditor', 'reception']);
+        $this->ok('Reports loaded.', (new ReportService($this->db))->analytics($request->query(), (string)$user['role']));
+    }
 }
 

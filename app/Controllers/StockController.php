@@ -67,7 +67,7 @@ final class StockController extends Controller
         $pages = max(1, (int)ceil($total / $perPage));
 
         $movements = $this->db->fetchAll(
-            "SELECT sm.created_at, sm.movement_type, sm.qty, sm.note, e.name AS extra_name, u.name AS user_name
+            "SELECT sm.id, sm.created_at, sm.movement_type, sm.qty, sm.note, e.name AS extra_name, u.name AS user_name
              FROM stock_movements sm JOIN extras e ON e.id=sm.extra_id LEFT JOIN users u ON u.id=sm.created_by
              {$whereSql}
              ORDER BY sm.created_at DESC

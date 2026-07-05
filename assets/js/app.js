@@ -36,7 +36,7 @@
   function tableCell(column, value) {
     return esc(isDateColumn(column) ? formatDateTime(value) : value);
   }
-  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null };
+  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null, reports: null, reportCharts: {}, reportExports: [] };
   let modal;
 
   // Initialize Bootstrap widgets, bind event handlers, restore the session,
@@ -77,6 +77,10 @@
     $('#resetStockMovementFilters')?.addEventListener('click', resetStockMovementFilters);
     $('#auditFilters')?.addEventListener('submit', e => { e.preventDefault(); state.auditPage = 1; loadAudit(); });
     $('#resetAuditFilters')?.addEventListener('click', resetAuditFilters);
+    $('#reportFilters')?.addEventListener('submit', e => { e.preventDefault(); loadReports(); });
+    $('#resetReportFilters')?.addEventListener('click', resetReportFilters);
+    $('#exportReportsButton')?.addEventListener('click', exportReportsCsv);
+    $('#printReportsButton')?.addEventListener('click', () => window.print());
     document.querySelectorAll('[data-bookings-tab]').forEach(btn => btn.addEventListener('click', () => switchBookingsTab(btn.dataset.bookingsTab)));
     $('#bookingHistoryFilters')?.addEventListener('submit', e => { e.preventDefault(); state.bookingHistoryPage = 1; loadBookingHistory(); });
     $('#resetBookingHistoryFilters')?.addEventListener('click', resetBookingHistoryFilters);
@@ -639,7 +643,103 @@
 
   async function loadPayments() { const d = await api.get('/payments'); $('#paymentsList').innerHTML = table(d.payments || [], ['created_at', 'guest_name', 'room_name', 'method', 'amount', 'note', 'voided_at']); }
   async function loadExpenses() { const d = await api.get('/expenses'); state.categories = d.categories || []; $('#expensesList').innerHTML = table(d.expenses || [], ['expense_date', 'category_name', 'method', 'amount', 'vendor', 'description', 'voided_at']); }
-  async function loadReports() { const d = await api.get('/reports/summary'); $('#reportsPanel').innerHTML = `<div class="row g-3"><div class="col"><div class="metric"><div>Revenue</div><div class="value">${money(d.revenue)}</div></div></div><div class="col"><div class="metric"><div>Expenses</div><div class="value">${money(d.expenses)}</div></div></div><div class="col"><div class="metric"><div>Net Income</div><div class="value">${money(d.net_income)}</div></div></div></div><h5 class="mt-4">Payments by Method</h5>${table(d.payments_by_method || [], ['method', 'total'])}`; }
+  async function loadReports() {
+    const form = $('#reportFilters');
+    const params = new URLSearchParams(form ? Object.fromEntries(new FormData(form).entries()) : {});
+    $('#reportsPanel').innerHTML = '<div class="surface empty-state">Loading reports...</div>';
+    try {
+      const data = await api.get(`/reports/analytics?${params.toString()}`);
+      state.reports = data;
+      populateReportFilters(data.options || {});
+      renderReports(data);
+    } catch (err) {
+      $('#reportsPanel').innerHTML = `<div class="alert alert-danger">${esc(err.message)}</div>`;
+    }
+  }
+
+  function populateReportFilters(options) {
+    fillSelect('#reportRoomFilter', options.rooms || [], 'id', 'name', 'All rooms', state.reports?.filters?.room_id || '');
+    fillSelect('#reportRoomTypeFilter', options.room_types || [], 'type', 'type', 'All types', state.reports?.filters?.room_type || '');
+    fillSelect('#reportPaymentFilter', (options.payment_methods || []).map(x => ({ id: x, name: x })), 'id', 'name', 'All methods', state.reports?.filters?.payment_method || '');
+    fillSelect('#reportCategoryFilter', options.expense_categories || [], 'id', 'name', 'All categories', state.reports?.filters?.expense_category_id || '');
+    fillSelect('#reportStaffFilter', options.staff || [], 'id', 'name', 'All staff', state.reports?.filters?.staff_id || '');
+  }
+
+  function fillSelect(selector, rows, valueKey, labelKey, emptyLabel, selected) {
+    const select = $(selector);
+    if (!select) return;
+    const current = String(selected || select.value || '');
+    select.innerHTML = `<option value="">${emptyLabel}</option>` + rows.map(row => `<option value="${esc(row[valueKey])}">${esc(row[labelKey])}</option>`).join('');
+    select.value = current;
+  }
+
+  function renderReports(data) {
+    state.reportExports = [];
+    const d = data.dashboard || {};
+    const cards = [
+      ['Today Revenue', money(d.today_revenue)], ['MTD Revenue', money(d.mtd_revenue)], ['MTD Expenses', money(d.mtd_expenses)], ['MTD Net Cashflow', money(d.mtd_cashflow)],
+      ['Occupancy', pct(d.current_occupancy_rate)], ['Occupied', d.occupied_rooms || 0], ['Vacant', d.vacant_rooms || 0], ['Dirty', d.dirty_rooms || 0],
+      ['Maintenance', d.maintenance_rooms || 0], ['Outstanding', money(d.outstanding_balances)], ['Extras Today', money(d.extras_sales_today)], ['Low Stock', d.low_stock_count || 0], ['Pending Check-outs', d.pending_checkouts || 0], ['Cancelled MTD', d.cancelled_bookings_month || 0]
+    ];
+    $('#reportsPanel').innerHTML = `<div class="report-range-note">${esc(data.filters.start)} to ${esc(data.filters.end)} &middot; ${esc((data.meta?.notes || []).join(' '))}</div><div class="report-kpi-grid">${cards.map(([label, value]) => `<div class="metric"><div class="metric-label">${esc(label)}</div><div class="value">${value}</div></div>`).join('')}</div><div class="reports-grid mt-3">${reportCanvas('cashflowChart', 'Monthly Cashflow')}${reportCanvas('roomRevenueChart', 'Top Rooms by Revenue')}${reportCanvas('occupancyChart', 'Occupancy Rate')}${reportCanvas('extrasChart', 'Extras by Revenue')}${reportCanvas('expensesChart', 'Expenses by Category')}${reportCanvas('paymentChart', 'Payment Method Split')}</div>${reportSection('Monthly Revenue & Cashflow', reportTable('monthly_cashflow', data.monthly_cashflow?.rows || [], ['month','revenue','expenses','net_cashflow','room_revenue','extras_revenue','other_revenue','revenue_growth_pct']))}${reportSection('Room Performance', reportTable('room_performance', data.room_performance?.rows || [], ['name','type','rate','bookings','occupied_nights','total_revenue','avg_revenue_per_booking','adr','revpar','extras_revenue','cancellations','avg_los','discount_amount','net_room_revenue']))}${reportSection('Occupancy', reportTable('occupancy_daily', data.occupancy?.daily || [], ['date','available_rooms','occupied_rooms','occupancy_pct']))}${reportSection('Extras / Bar Sales', reportTable('extras_products', data.extras?.products || [], ['product','category','quantity_sold','revenue','cost','gross_margin','current_stock']))}${reportSection('Expenses', reportTable('expenses_details', data.expenses?.details || [], ['expense_date','category','vendor','description','method','user_name','amount','expense_type']))}${reportSection('Stock & Low Inventory', reportTable('stock_products', data.stock?.products || [], ['product','category','current_stock','reorder_level','unit_cost','estimated_value']))}${reportSection('Payment Methods', reportTable('payment_methods', data.payments?.by_method || [], ['method','count','amount','percentage']))}${reportSection('Outstanding Balances', reportTable('outstanding_balances', data.outstanding_balances?.rows || [], ['guest_name','room','checkin_at','checkout_at','booking_total','amount_paid','balance_due','status','created_by','payment_staff','days_overdue']))}${reportSection('Discounts & Cancellations', reportTable('discount_cancellations', data.discounts_cancellations?.rows || [], ['booking_id','room','original_amount','discount','cancelled_amount','reason','user_name']))}${reportSection('Guest Insights', reportTable('guest_nationality', data.guests?.nationality_mix || [], ['nationality','total']) + reportTable('guest_gender', data.guests?.gender_mix || [], ['gender','total']))}${reportSection('Staff Accountability', reportTable('staff_accountability', data.staff?.rows || [], ['user_name','bookings','payments','revenue_handled','expenses','expenses_recorded','stock_movements','discounts','cancellations']))}${reportSection('Audit & Anomaly Flags', reportTable('audit_anomalies', data.anomalies?.issues || [], ['severity','type','description','entity','entity_id','suggested_action']))}`;
+    renderReportCharts(data);
+  }
+
+  function reportCanvas(id, title) { return `<div class="surface report-chart"><h5>${esc(title)}</h5><canvas id="${id}"></canvas></div>`; }
+  function reportSection(title, body) { return `<section class="surface report-section"><div class="report-section-heading"><h5>${esc(title)}</h5></div>${body}</section>`; }
+  function pct(n) { return `${Number(n || 0).toFixed(2)}%`; }
+
+  function reportTable(exportName, rows, cols) {
+    state.reportExports.push({ name: exportName, rows, cols });
+    if (!rows.length) return '<div class="empty-state">No records for this period.</div>';
+    return `<div class="table-responsive"><table class="table table-sm table-striped app-table"><thead><tr>${cols.map(c => `<th>${esc(c.replaceAll('_',' '))}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${cols.map(c => `<td>${formatReportCell(c, row[c])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+
+  function formatReportCell(column, value) {
+    if (value === null || value === undefined) return 'N/A';
+    if (isDateColumn(column) || column === 'date' || column === 'month') return esc(column === 'month' ? value : formatDateTime(value));
+    if (/amount|revenue|expense|cashflow|paid|balance|rate|adr|revpar|cost|margin|value|total/.test(column) && value !== 'N/A') return money(value);
+    if (/pct|percentage/.test(column) && value !== 'N/A') return pct(value);
+    return esc(value);
+  }
+
+  function renderReportCharts(data) {
+    Object.values(state.reportCharts).forEach(chart => chart?.destroy?.());
+    state.reportCharts = {};
+    chartLine('cashflowChart', data.monthly_cashflow?.rows || [], 'month', [{ key: 'revenue', label: 'Payments' }, { key: 'expenses', label: 'Expenses' }, { key: 'net_cashflow', label: 'Net cashflow' }]);
+    chartBar('roomRevenueChart', (data.room_performance?.rows || []).slice(0, 10), 'name', 'total_revenue', 'Revenue');
+    chartLine('occupancyChart', data.occupancy?.daily || [], 'date', [{ key: 'occupancy_pct', label: 'Occupancy %' }], true);
+    chartBar('extrasChart', (data.extras?.products || []).slice(0, 10), 'product', 'revenue', 'Revenue');
+    chartBar('expensesChart', data.expenses?.by_category || [], 'category', 'amount', 'Amount');
+    chartDoughnut('paymentChart', data.payments?.by_method || [], 'method', 'amount');
+  }
+
+  function chartLine(id, rows, labelKey, series, percent = false) {
+    const canvas = $(`#${id}`); if (!canvas || !window.Chart) return;
+    state.reportCharts[id] = new Chart(canvas, { type: 'line', data: { labels: rows.map(r => r[labelKey]), datasets: series.map((s, i) => ({ label: s.label, data: rows.map(r => Number(r[s.key] || 0)), borderColor: ['#0d6efd','#dc3545','#198754'][i % 3], backgroundColor: 'rgba(13,110,253,.08)', tension: .25 })) }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { callback: v => percent ? `${v}%` : money(v) } } } } });
+  }
+
+  function chartBar(id, rows, labelKey, valueKey, label) {
+    const canvas = $(`#${id}`); if (!canvas || !window.Chart) return;
+    state.reportCharts[id] = new Chart(canvas, { type: 'bar', data: { labels: rows.map(r => r[labelKey]), datasets: [{ label, data: rows.map(r => Number(r[valueKey] || 0)), backgroundColor: '#0d6efd' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } } });
+  }
+
+  function chartDoughnut(id, rows, labelKey, valueKey) {
+    const canvas = $(`#${id}`); if (!canvas || !window.Chart) return;
+    state.reportCharts[id] = new Chart(canvas, { type: 'doughnut', data: { labels: rows.map(r => r[labelKey]), datasets: [{ data: rows.map(r => Number(r[valueKey] || 0)), backgroundColor: ['#0d6efd','#198754','#ffc107','#dc3545','#6f42c1'] }] }, options: { responsive: true, maintainAspectRatio: false } });
+  }
+
+  function resetReportFilters() { $('#reportFilters')?.reset(); loadReports(); }
+
+  function exportReportsCsv() {
+    if (!state.reportExports.length) return;
+    const lines = [];
+    state.reportExports.forEach(section => { lines.push(section.name); lines.push(section.cols.join(',')); section.rows.forEach(row => lines.push(section.cols.map(c => csvCell(row[c])).join(','))); lines.push(''); });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `hotelpos-reports-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  function csvCell(value) { return `"${String(value ?? '').replaceAll('"', '""')}"`; }
 
   async function loadUsers() {
     const d = await api.get('/users');
@@ -705,7 +805,8 @@
   function renderStockMovements() {
     const rows = state.stockMovements || [];
     const pagination = state.stockMovementPagination || { page: 1, pages: 1, total: 0 };
-    $('#stockMovementList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Extra</th><th>Type</th><th>Qty</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.extra_name)}</td><td>${stockMovementBadge(row.movement_type)}</td><td>${Number(row.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No stock movements match these filters.</div>';
+    $('#stockMovementList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Extra</th><th>Type</th><th>Qty</th><th class="text-end">Actions</th></tr></thead><tbody>${rows.map(row => `<tr><td>${formatDateTime(row.created_at)}</td><td>${esc(row.extra_name)}</td><td>${stockMovementBadge(row.movement_type)}</td><td>${Number(row.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-stock-movement-view="${row.id}">View</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No stock movements match these filters.</div>';
+    document.querySelectorAll('[data-stock-movement-view]').forEach(btn => btn.addEventListener('click', () => viewStockMovement(btn.dataset.stockMovementView)));
     renderPager('#stockMovementPager', pagination, 'movement-page');
     document.querySelectorAll('[data-movement-page]').forEach(btn => btn.addEventListener('click', () => {
       const page = state.stockMovementPagination?.page || 1;
@@ -758,6 +859,26 @@
   function stockMovementBadge(type) {
     const tone = ({ in: 'success', return: 'success', out: 'primary', adjustment: 'warning', waste: 'danger' })[type] || 'secondary';
     return statusBadge(type || 'unknown', tone);
+  }
+
+  function stockMovementById(id) {
+    return state.stockMovements.find(row => Number(row.id) === Number(id));
+  }
+
+  function viewStockMovement(id) {
+    const movement = stockMovementById(id);
+    if (!movement) return;
+    openForm('Stock Movement Details', `<form class="room-profile">
+      <div class="room-profile-hero"><div><div class="room-profile-label">${esc(movement.extra_name || 'Extra')}</div><h3>${esc(movement.movement_type || 'Movement')}</h3></div>${stockMovementBadge(movement.movement_type)}</div>
+      <div class="room-detail-grid">
+        <div class="room-detail-tile"><span>Date</span><strong>${formatDateTime(movement.created_at)}</strong></div>
+        <div class="room-detail-tile"><span>Quantity</span><strong>${Number(movement.qty || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></div>
+        <div class="room-detail-tile"><span>User</span><strong>${esc(movement.user_name || 'Not recorded')}</strong></div>
+        <div class="room-detail-tile"><span>Type</span><strong>${esc(movement.movement_type || 'Not recorded')}</strong></div>
+        <div class="room-detail-tile room-detail-wide"><span>Note</span><strong>${esc(movement.note || 'No note recorded')}</strong></div>
+      </div>
+      <div class="room-profile-footer"><button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button></div>
+    </form>`, e => e.preventDefault());
   }
   // Generic table renderer for simple admin/reference lists.
   function table(rows, cols) {
