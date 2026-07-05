@@ -671,7 +671,7 @@
           <div class="col-md-7"><label class="form-label">Guest Name <span class="text-danger">*</span></label><input name="guest_name" class="form-control form-control-lg" autocomplete="name" required></div>
           <div class="col-md-5"><label class="form-label">Contact</label><input name="contact" class="form-control form-control-lg" autocomplete="tel"></div>
           <div class="col-md-4"><label class="form-label">Gender</label><select name="gender" class="form-select"><option>Male</option><option>Female</option><option>Other</option></select></div>
-          <div class="col-md-4"><label class="form-label">Nationality</label><input name="nationality" class="form-control" autocomplete="country-name"></div>
+          <div class="col-md-4"><label class="form-label">Nationality</label><select name="nationality" class="form-select" autocomplete="country-name"><option value="Ghana" selected>Ghana</option><option value="Nigeria">Nigeria</option><option value="Togo">Togo</option><option value="Benin">Benin</option><option value="Cote d'Ivoire">Cote d'Ivoire</option><option value="Burkina Faso">Burkina Faso</option><option value="United Kingdom">United Kingdom</option><option value="United States">United States</option><option value="Other">Other</option></select></div>
           <div class="col-md-4"><label class="form-label">Arrival time</label><input class="form-control" value="Now" disabled></div>
         </div>
       </div>
