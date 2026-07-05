@@ -254,16 +254,16 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
 }
 
 .entity-layout { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 16px; align-items: start; }
-#extraForm, #userForm, #stockMovementForm { position: sticky; top: 84px; }
-#extraForm .alert, #userForm .alert, #stockMovementForm .alert { margin-bottom: 0; }
-#extraForm.was-validated .form-control:invalid, #userForm.was-validated .form-control:invalid, #stockMovementForm.was-validated .form-control:invalid, #stockMovementForm.was-validated .form-select:invalid { border-color: #dc3545; }
-#extraForm.was-validated .form-control:valid, #userForm.was-validated .form-control:valid, #stockMovementForm.was-validated .form-control:valid, #stockMovementForm.was-validated .form-select:valid { border-color: #198754; }
+#extraForm, #userForm, #stockMovementForm, #expenseForm { position: sticky; top: 84px; }
+#extraForm .alert, #userForm .alert, #stockMovementForm .alert, #expenseForm .alert { margin-bottom: 0; }
+#extraForm.was-validated .form-control:invalid, #userForm.was-validated .form-control:invalid, #stockMovementForm.was-validated .form-control:invalid, #stockMovementForm.was-validated .form-select:invalid, #expenseForm.was-validated .form-control:invalid, #expenseForm.was-validated .form-select:invalid { border-color: #dc3545; }
+#extraForm.was-validated .form-control:valid, #userForm.was-validated .form-control:valid, #stockMovementForm.was-validated .form-control:valid, #stockMovementForm.was-validated .form-select:valid, #expenseForm.was-validated .form-control:valid, #expenseForm.was-validated .form-select:valid { border-color: #198754; }
 #stockMovementFilters, #auditFilters { grid-template-columns: minmax(190px, 1.2fr) repeat(4, minmax(130px, .8fr)) auto; }
 #auditList .app-table td:nth-child(3) { min-width: 180px; overflow-wrap: anywhere; }
 .app-table .btn + .btn { margin-left: 4px; }
 @media (max-width: 1199.98px) {
   .entity-layout { grid-template-columns: 1fr; }
-  #extraForm, #userForm, #stockMovementForm { position: static; }
+  #extraForm, #userForm, #stockMovementForm, #expenseForm { position: static; }
   #stockMovementFilters, #auditFilters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 575.98px) {

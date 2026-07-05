@@ -171,7 +171,30 @@ if ($base === '/' || $base === '\\') {
         <div class="d-none" data-stock-panel="inventory"><div id="stockInventoryList" class="table-responsive surface"></div></div>
       </section>
       <section class="d-none" data-panel="payments"><div class="page-header"><div><h2>Payments</h2><p>Received payments and void status.</p></div></div><div id="paymentsList" class="table-responsive surface"></div></section>
-      <section class="d-none" data-panel="expenses"><div class="page-header"><div><h2>Expenses</h2><p>Operating expenses and reporting categories.</p></div><button class="btn btn-primary" id="newExpenseButton">New Expense</button></div><div id="expensesList" class="table-responsive surface"></div></section>
+      <section class="d-none" data-panel="expenses">
+        <div class="page-header"><div><h2>Expenses</h2><p>Record operating costs and keep the list focused for daily review.</p></div></div>
+        <div class="entity-layout">
+          <form id="expenseForm" class="surface room-inline-form" novalidate>
+            <input type="hidden" name="id" value="">
+            <div class="form-panel-heading"><h5 id="expenseFormTitle">New Expense</h5><span>Add receipts as they happen, then review recent entries beside the form.</span></div>
+            <div class="row g-3 room-form-stack">
+              <div class="col-12"><label class="form-label">Date <span class="text-danger">*</span></label><input name="expense_date" type="date" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Category <span class="text-danger">*</span></label><select name="category_id" class="form-select" id="expenseCategory" required><option value="">Select category</option></select></div>
+              <div class="col-12"><label class="form-label">Method</label><select name="method" class="form-select"><option value="cash">Cash</option><option value="momo">MoMo</option><option value="card">Card</option><option value="bank">Bank</option><option value="other">Other</option></select></div>
+              <div class="col-12"><label class="form-label">Amount <span class="text-danger">*</span></label><input name="amount" type="number" step="0.01" min="0.01" class="form-control" required></div>
+              <div class="col-12"><label class="form-label">Vendor</label><input name="vendor" class="form-control" maxlength="160" placeholder="Supplier or payee"></div>
+              <div class="col-12"><label class="form-label">Reference</label><input name="reference_no" class="form-control" maxlength="120" placeholder="Receipt, invoice, or MoMo reference"></div>
+              <div class="col-12"><label class="form-label">Description</label><textarea name="description" class="form-control" rows="3" maxlength="500" placeholder="Optional note for audit context"></textarea></div>
+            </div>
+            <div class="alert d-none" id="expenseStatus"></div>
+            <div class="room-inline-actions"><button class="btn btn-primary" type="submit" id="expenseSubmitButton">Save Expense</button><button class="btn btn-outline-secondary" type="reset">Clear</button></div>
+          </form>
+          <div>
+            <div id="expensesList" class="table-responsive surface"></div>
+            <div id="expensesPager" class="booking-history-pager mt-3"></div>
+          </div>
+        </div>
+      </section>
       <section class="d-none" data-panel="reports">
         <div class="page-header"><div><h2>Reports</h2><p>Management analytics for revenue, cashflow, occupancy, inventory, staff activity, and audit issues.</p></div><div class="d-flex gap-2"><button class="btn btn-outline-secondary" type="button" id="printReportsButton">Print</button><button class="btn btn-primary" type="button" id="exportReportsButton">Export CSV</button></div></div>
         <form id="reportFilters" class="surface report-filters mb-3" data-default-range="month-to-date">

@@ -36,7 +36,7 @@
   function tableCell(column, value) {
     return esc(isDateColumn(column) ? formatDateTime(value) : value);
   }
-  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null, reports: null, reportCharts: {}, reportExports: [], reportTablePages: {}, reportTab: 'overview' };
+  let state = { user: null, rooms: [], extras: [], bookings: [], categories: [], expenses: [], expensePage: 1, expensePagination: null, bookingsTab: 'current', bookingHistory: [], bookingHistoryPage: 1, bookingHistoryPagination: null, users: [], stockTab: 'movements', stockMovements: [], stockMovementPage: 1, stockMovementPagination: null, auditLogs: [], auditPage: 1, auditPagination: null, reports: null, reportCharts: {}, reportExports: [], reportTablePages: {}, reportTab: 'overview' };
   let modal;
 
   // Initialize Bootstrap widgets, bind event handlers, restore the session,
@@ -69,7 +69,8 @@
     $('#extraForm')?.addEventListener('reset', resetExtraForm);
     $('#stockMovementForm')?.addEventListener('submit', saveStockMovementInline);
     $('#stockMovementForm')?.addEventListener('reset', resetStockMovementForm);
-    $('#newExpenseButton')?.addEventListener('click', expenseForm);
+    $('#expenseForm')?.addEventListener('submit', saveExpenseInline);
+    $('#expenseForm')?.addEventListener('reset', resetExpenseForm);
     $('#userForm')?.addEventListener('submit', saveUserInline);
     $('#userForm')?.addEventListener('reset', resetUserForm);
     document.querySelectorAll('[data-stock-tab]').forEach(btn => btn.addEventListener('click', () => switchStockTab(btn.dataset.stockTab)));
@@ -642,7 +643,14 @@
   }
 
   async function loadPayments() { const d = await api.get('/payments'); $('#paymentsList').innerHTML = table(d.payments || [], ['created_at', 'guest_name', 'room_name', 'method', 'amount', 'note', 'voided_at']); }
-  async function loadExpenses() { const d = await api.get('/expenses'); state.categories = d.categories || []; $('#expensesList').innerHTML = table(d.expenses || [], ['expense_date', 'category_name', 'method', 'amount', 'vendor', 'description', 'voided_at']); }
+  async function loadExpenses() {
+    const d = await api.get(`/expenses?${expenseQuery()}`);
+    state.categories = d.categories || [];
+    state.expenses = d.expenses || [];
+    state.expensePagination = d.pagination || { page: 1, pages: 1, total: 0 };
+    renderExpenseCategories();
+    renderExpenses();
+  }
   function setDefaultReportRange(force = false) {
     const form = $('#reportFilters');
     if (!form) return;
@@ -1157,7 +1165,132 @@
       submit.textContent = 'Save Movement';
     }
   }
-  async function expenseForm() { await loadExpenses(); const options = state.categories.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join(''); openForm('New Expense', `<form class="row g-3"><div class="col-md-4"><label class="form-label">Date</label><input name="expense_date" type="date" class="form-control" required></div><div class="col-md-4"><label class="form-label">Category</label><select name="category_id" class="form-select">${options}</select></div><div class="col-md-4"><label class="form-label">Method</label><select name="method" class="form-select"><option value="cash">Cash</option><option value="momo">MoMo</option><option value="card">Card</option><option value="bank">Bank</option><option value="other">Other</option></select></div><div class="col-md-4"><label class="form-label">Amount</label><input name="amount" type="number" step="0.01" class="form-control" required></div><div class="col-md-4"><label class="form-label">Vendor</label><input name="vendor" class="form-control"></div><div class="col-md-4"><label class="form-label">Reference</label><input name="reference_no" class="form-control"></div><div class="col-12"><label class="form-label">Description</label><input name="description" class="form-control"></div><div class="col-12"><button class="btn btn-primary">Save</button></div></form>`, async e => { e.preventDefault(); await api.post('/expenses/save', Object.fromEntries(new FormData(e.target).entries())); modal.hide(); loadExpenses(); }); }
+  function expenseQuery() {
+    const params = new URLSearchParams();
+    params.set('page', String(state.expensePage || 1));
+    params.set('per_page', '10');
+    return params.toString();
+  }
+
+  function expenseById(id) {
+    return state.expenses.find(expense => Number(expense.id) === Number(id));
+  }
+
+  function renderExpenseCategories() {
+    const select = $('#expenseCategory');
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">Select category</option>' + state.categories.map(category => `<option value="${category.id}">${esc(category.name)}</option>`).join('');
+    select.value = selected;
+  }
+
+  function renderExpenses() {
+    const rows = state.expenses || [];
+    const pagination = state.expensePagination || { page: 1, pages: 1, total: 0 };
+    $('#expensesList').innerHTML = rows.length ? `<table class="table table-sm table-striped app-table"><thead><tr><th>Date</th><th>Category</th><th>Method</th><th>Amount</th><th>Vendor</th><th class="text-end">Actions</th></tr></thead><tbody>${rows.map(expense => `<tr><td>${formatDateTime(expense.expense_date)}</td><td>${esc(expense.category_name)}</td><td class="text-capitalize">${esc(expense.method)}</td><td>${money(expense.amount)}</td><td>${esc(expense.vendor || 'Not recorded')}</td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-expense-view="${expense.id}">View</button> <button class="btn btn-sm btn-outline-primary" data-expense-edit="${expense.id}" ${expense.voided_at ? 'disabled' : ''}>Edit</button></td></tr>`).join('')}</tbody></table>` : '<div class="empty-state">No expenses found. Record the first expense from the form.</div>';
+    document.querySelectorAll('[data-expense-view]').forEach(btn => btn.addEventListener('click', () => viewExpense(btn.dataset.expenseView)));
+    document.querySelectorAll('[data-expense-edit]').forEach(btn => btn.addEventListener('click', () => editExpenseInline(btn.dataset.expenseEdit)));
+    renderPager('#expensesPager', pagination, 'expense-page');
+    document.querySelectorAll('[data-expense-page]').forEach(btn => btn.addEventListener('click', () => {
+      const page = state.expensePagination?.page || 1;
+      state.expensePage = btn.dataset.expensePage === 'next' ? page + 1 : page - 1;
+      loadExpenses();
+    }));
+  }
+
+  function showExpenseStatus(message, className = 'd-none') {
+    const status = $('#expenseStatus');
+    if (!status) return;
+    status.className = `alert ${className}`;
+    status.textContent = message;
+  }
+
+  function resetExpenseForm(event) {
+    const form = event.currentTarget;
+    window.setTimeout(() => {
+      form.querySelector('[name="id"]').value = '';
+      form.querySelector('[name="method"]').value = 'cash';
+      $('#expenseFormTitle').textContent = 'New Expense';
+      $('#expenseSubmitButton').textContent = 'Save Expense';
+      form.classList.remove('was-validated');
+      showExpenseStatus('', 'd-none');
+    });
+  }
+
+  function editExpenseInline(id) {
+    const expense = expenseById(id);
+    const form = $('#expenseForm');
+    if (!expense || !form) return;
+    form.querySelector('[name="id"]').value = expense.id;
+    form.querySelector('[name="expense_date"]').value = String(expense.expense_date || '').slice(0, 10);
+    form.querySelector('[name="category_id"]').value = String(expense.category_id || '');
+    form.querySelector('[name="method"]').value = expense.method || 'cash';
+    form.querySelector('[name="amount"]').value = Number(expense.amount || 0).toFixed(2);
+    form.querySelector('[name="vendor"]').value = expense.vendor || '';
+    form.querySelector('[name="reference_no"]').value = expense.reference_no || '';
+    form.querySelector('[name="description"]').value = expense.description || '';
+    $('#expenseFormTitle').textContent = 'Edit Expense';
+    $('#expenseSubmitButton').textContent = 'Update Expense';
+    showExpenseStatus('Editing expense. Save changes or clear to start a new one.', 'alert-info');
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    form.querySelector('[name="amount"]')?.focus();
+  }
+
+  function viewExpense(id) {
+    const expense = expenseById(id);
+    if (!expense) return;
+    const isVoided = Boolean(expense.voided_at);
+    openForm('Expense Details', `<form class="room-profile">
+      <div class="room-profile-hero"><div><div class="room-profile-label">${esc(expense.category_name || 'Expense')}</div><h3>${money(expense.amount)}</h3></div>${statusBadge(isVoided ? 'Voided' : 'Recorded', isVoided ? 'secondary' : 'success')}</div>
+      <div class="room-detail-grid">
+        <div class="room-detail-tile"><span>Date</span><strong>${formatDateTime(expense.expense_date)}</strong></div>
+        <div class="room-detail-tile"><span>Method</span><strong>${esc(expense.method || 'Not recorded')}</strong></div>
+        <div class="room-detail-tile"><span>Vendor</span><strong>${esc(expense.vendor || 'Not recorded')}</strong></div>
+        <div class="room-detail-tile"><span>Reference</span><strong>${esc(expense.reference_no || 'Not recorded')}</strong></div>
+        <div class="room-detail-tile"><span>Recorded by</span><strong>${esc(expense.user_name || 'System')}</strong></div>
+        <div class="room-detail-tile"><span>Created</span><strong>${formatDateTime(expense.created_at, 'Not recorded')}</strong></div>
+        <div class="room-detail-tile room-detail-wide"><span>Description</span><strong>${esc(expense.description || 'No description recorded')}</strong></div>
+      </div>
+      <div class="room-profile-footer">${!isVoided ? `<button class="btn btn-primary" type="button" data-expense-edit-from-view="${expense.id}">Edit expense</button>` : ''}<button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Close</button></div>
+    </form>`, e => e.preventDefault());
+    $('[data-expense-edit-from-view]')?.addEventListener('click', () => { modal.hide(); editExpenseInline(expense.id); });
+  }
+
+  async function saveExpenseInline(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = $('#expenseSubmitButton');
+    const data = Object.fromEntries(new FormData(form).entries());
+    const errors = [];
+    if (!data.expense_date) errors.push('Expense date is required.');
+    if (!data.category_id) errors.push('Choose a category.');
+    if (!data.method) errors.push('Choose a payment method.');
+    if (String(data.amount || '').trim() === '' || Number(data.amount) <= 0) errors.push('Amount must be greater than zero.');
+    form.classList.add('was-validated');
+    if (errors.length) {
+      showExpenseStatus(errors.join(' '), 'alert-danger');
+      return;
+    }
+
+    submit.disabled = true;
+    submit.textContent = data.id ? 'Updating...' : 'Saving...';
+    try {
+      await api.post('/expenses/save', data);
+      form.reset();
+      form.querySelector('[name="id"]').value = '';
+      $('#expenseFormTitle').textContent = 'New Expense';
+      $('#expenseSubmitButton').textContent = 'Save Expense';
+      form.classList.remove('was-validated');
+      showExpenseStatus(data.id ? 'Expense updated successfully.' : 'Expense recorded successfully.', 'alert-success');
+      state.expensePage = 1;
+      await loadExpenses();
+    } catch (err) {
+      showExpenseStatus(err.message, 'alert-danger');
+    } finally {
+      submit.disabled = false;
+      submit.textContent = $('#expenseFormTitle').textContent === 'Edit Expense' ? 'Update Expense' : 'Save Expense';
+    }
+  }
   function userById(id) {
     return state.users.find(user => Number(user.id) === Number(id));
   }
