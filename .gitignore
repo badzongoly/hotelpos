@@ -1,0 +1,24 @@
+# Local machine configuration and secrets
+config/config.local.php
+.env
+.env.*
+*.key
+*.pem
+
+# Legacy/reference material that should not be published
+POS_v1/
+PROJECT_CONTEXT.md
+
+# Runtime/generated files
+storage/logs/*.log
+storage/exports/*
+!storage/logs/.gitkeep
+!storage/exports/.gitkeep
+*.tmp
+*.log
+
+# Dependencies and local tooling
+vendor/
+node_modules/
+.DS_Store
+Thumbs.db
