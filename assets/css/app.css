@@ -240,6 +240,7 @@ body { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe 
 .form-panel-heading { border-bottom: 1px solid var(--line); padding-bottom: 12px; }
 .form-panel-heading h5 { margin: 0 0 4px; }
 .form-panel-heading span { color: var(--muted); font-size: 14px; }
+.room-form-stack { display: grid; gap: 14px; }
 .room-inline-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .room-inline-form .alert { margin-bottom: 0; }
 .room-inline-form.was-validated .form-control:invalid { border-color: #dc3545; }

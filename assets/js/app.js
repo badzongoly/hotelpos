@@ -63,7 +63,6 @@
       document.body.classList.remove('sidebar-open');
     }));
     $('[data-refresh="dashboard"]')?.addEventListener('click', () => loadDashboard());
-    $('#newRoomButton')?.addEventListener('click', focusNewRoomForm);
     $('#newRoomForm')?.addEventListener('submit', createRoomInline);
     $('#newRoomForm')?.addEventListener('reset', () => showNewRoomStatus('', 'd-none'));
     $('#newExtraButton')?.addEventListener('click', extraForm);
@@ -292,7 +291,7 @@
       return;
     }
 
-    $('#roomsList').innerHTML = `<table class="table table-sm table-striped app-table rooms-table"><thead><tr><th>Name</th><th>Type</th><th>Rate</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>${state.rooms.map(room => `<tr><td>${esc(room.name)}</td><td>${esc(room.type)}</td><td>${money(room.rate)}</td><td><span class="badge ${roomStatusClass(room.status)}">${esc(room.status)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-room-view="${room.id}">View</button>${canEdit ? ` <button class="btn btn-sm btn-outline-primary" data-room-edit="${room.id}">Edit</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
+    $('#roomsList').innerHTML = `<table class="table table-sm table-striped app-table rooms-table"><thead><tr><th>Name</th><th>Rate</th><th>Status</th><th class="text-end">Actions</th></tr></thead><tbody>${state.rooms.map(room => `<tr><td>${esc(room.name)}</td><td>${money(room.rate)}</td><td><span class="badge ${roomStatusClass(room.status)}">${esc(room.status)}</span></td><td class="text-end"><button class="btn btn-sm btn-outline-secondary" data-room-view="${room.id}">View</button>${canEdit ? ` <button class="btn btn-sm btn-outline-primary" data-room-edit="${room.id}">Edit</button>` : ''}</td></tr>`).join('')}</tbody></table>`;
     document.querySelectorAll('[data-room-view]').forEach(btn => btn.addEventListener('click', () => viewRoom(btn.dataset.roomView)));
     document.querySelectorAll('[data-room-edit]').forEach(btn => btn.addEventListener('click', () => roomForm(roomById(btn.dataset.roomEdit))));
   }
